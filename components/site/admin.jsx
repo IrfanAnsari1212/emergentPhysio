@@ -464,7 +464,17 @@ const SeoTab = ({ settings, refresh }) => {
 export const AdminPage = () => {
   const [authed, setAuthed] = useState(false)
   const [pw, setPw] = useState('')
+  const [remember, setRemember] = useState(true)
   const [loading, setLoading] = useState(false)
+  // Forgot password flow
+  const [forgotMode, setForgotMode] = useState(false)
+  const [forgotStep, setForgotStep] = useState(1) // 1=request, 2=otp, 3=newpw
+  const [otpInput, setOtpInput] = useState('')
+  const [resetToken, setResetToken] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [newPw2, setNewPw2] = useState('')
+  const [otpMaskedEmail, setOtpMaskedEmail] = useState('')
+
   const [tab, setTab] = useState('dashboard')
   const [stats, setStats] = useState(null)
   const [settings, setSettings] = useState(null)
@@ -488,17 +498,56 @@ export const AdminPage = () => {
   const [galleryUpload, setGalleryUpload] = useState({ category: 'general' })
   const galleryRef = useRef(null)
 
-  useEffect(() => { if (typeof window !== 'undefined' && localStorage.getItem('admin_token')) setAuthed(true) }, [])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const raw = localStorage.getItem('admin_session')
+    if (raw) {
+      try { const s = JSON.parse(raw); if (s.expiresAt && s.expiresAt > Date.now()) setAuthed(true); else localStorage.removeItem('admin_session') }
+      catch { localStorage.removeItem('admin_session') }
+    }
+  }, [])
   const login = async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw }) })
+      const r = await fetch('/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw, remember }) })
       const j = await r.json()
-      if (j.success) { localStorage.setItem('admin_token', j.token); setAuthed(true); toast.success('Welcome back!') }
-      else toast.error('Invalid password')
+      if (j.success) {
+        localStorage.setItem('admin_session', JSON.stringify({ token: j.token, expiresAt: j.expiresAt, remember: j.remember }))
+        setAuthed(true); toast.success('Welcome back!')
+      } else toast.error('Invalid password')
     } catch { toast.error('Login failed') } finally { setLoading(false) }
   }
-  const logout = () => { localStorage.removeItem('admin_token'); setAuthed(false) }
+  const logout = () => { localStorage.removeItem('admin_session'); setAuthed(false) }
+  const requestOtp = async () => {
+    setLoading(true)
+    try {
+      const r = await fetch('/api/admin/forgot-password', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      const j = await r.json()
+      if (j.success) { setOtpMaskedEmail(j.message || ''); setForgotStep(2); toast.success('OTP sent to admin email') }
+      else toast.error(j.error || 'Failed to send OTP')
+    } catch { toast.error('Network error') } finally { setLoading(false) }
+  }
+  const verifyOtp = async () => {
+    if (otpInput.length !== 6) return toast.error('Enter the 6-digit OTP')
+    setLoading(true)
+    try {
+      const r = await fetch('/api/admin/verify-otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ otp: otpInput }) })
+      const j = await r.json()
+      if (j.success) { setResetToken(j.resetToken); setForgotStep(3); toast.success('OTP verified') }
+      else toast.error(j.error || 'Invalid OTP')
+    } catch { toast.error('Network error') } finally { setLoading(false) }
+  }
+  const resetPassword = async () => {
+    if (newPw.length < 6) return toast.error('Password must be at least 6 characters')
+    if (newPw !== newPw2) return toast.error('Passwords do not match')
+    setLoading(true)
+    try {
+      const r = await fetch('/api/admin/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resetToken, newPassword: newPw }) })
+      const j = await r.json()
+      if (j.success) { toast.success('Password updated. Please login with the new password.'); setForgotMode(false); setForgotStep(1); setOtpInput(''); setNewPw(''); setNewPw2(''); setResetToken('') }
+      else toast.error(j.error || 'Failed')
+    } catch { toast.error('Network error') } finally { setLoading(false) }
+  }
 
   const refresh = async () => {
     try {
@@ -570,14 +619,44 @@ export const AdminPage = () => {
           <Card>
             <CardHeader className="text-center">
               <div className="h-14 w-14 rounded-2xl bg-blue-600 flex items-center justify-center mx-auto mb-3"><LayoutDashboard className="h-7 w-7 text-white" /></div>
-              <CardTitle className="font-display text-2xl">Admin Login</CardTitle>
-              <CardDescription>Enter password to access dashboard</CardDescription>
+              <CardTitle className="font-display text-2xl">{forgotMode ? 'Reset Password' : 'Admin Login'}</CardTitle>
+              <CardDescription>{forgotMode ? (forgotStep === 1 ? 'Send a verification code to the admin email.' : forgotStep === 2 ? 'Enter the 6-digit code we sent you.' : 'Set a new password for your account.') : 'Enter password to access dashboard'}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Input type="password" placeholder="Password" value={pw} onChange={e => setPw(e.target.value)} onKeyDown={e => e.key === 'Enter' && login()} className="h-12" />
-              <Button onClick={login} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 rounded-full h-12">{loading ? 'Logging in...' : 'Login'}</Button>
-              <p className="text-xs text-center text-slate-500">Default password: admin123</p>
-              <Link href="/" className="text-sm text-slate-500 hover:text-blue-600 w-full text-center block">Back to website</Link>
+              {!forgotMode && (
+                <>
+                  <Input type="password" placeholder="Password" value={pw} onChange={e => setPw(e.target.value)} onKeyDown={e => e.key === 'Enter' && login()} className="h-12" autoFocus />
+                  <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+                    <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                    Remember me for 30 days
+                  </label>
+                  <Button onClick={login} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 rounded-full h-12">{loading ? 'Logging in...' : 'Login'}</Button>
+                  <button onClick={() => { setForgotMode(true); setForgotStep(1) }} className="text-sm text-blue-600 hover:underline w-full text-center block">Forgot password?</button>
+                  <Link href="/" className="text-xs text-slate-500 hover:text-blue-600 w-full text-center block">← Back to website</Link>
+                </>
+              )}
+              {forgotMode && forgotStep === 1 && (
+                <>
+                  <div className="bg-blue-50 rounded-lg p-3 text-sm text-blue-900">A 6-digit verification code will be sent to the registered admin email address. The code is valid for 10 minutes.</div>
+                  <Button onClick={requestOtp} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 rounded-full h-12">{loading ? 'Sending...' : 'Send OTP to Admin Email'}</Button>
+                  <button onClick={() => setForgotMode(false)} className="text-sm text-slate-500 hover:text-blue-600 w-full text-center block">Back to login</button>
+                </>
+              )}
+              {forgotMode && forgotStep === 2 && (
+                <>
+                  {otpMaskedEmail && <div className="bg-green-50 rounded-lg p-3 text-sm text-green-900">{otpMaskedEmail}</div>}
+                  <Input value={otpInput} onChange={e => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6-digit code" className="h-12 text-center text-2xl tracking-[0.4em] font-mono" maxLength={6} />
+                  <Button onClick={verifyOtp} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 rounded-full h-12">{loading ? 'Verifying...' : 'Verify Code'}</Button>
+                  <button onClick={() => setForgotStep(1)} className="text-sm text-slate-500 hover:text-blue-600 w-full text-center block">Resend code</button>
+                </>
+              )}
+              {forgotMode && forgotStep === 3 && (
+                <>
+                  <Input type="password" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="New password (min 6 chars)" className="h-12" />
+                  <Input type="password" value={newPw2} onChange={e => setNewPw2(e.target.value)} placeholder="Confirm new password" className="h-12" onKeyDown={e => e.key === 'Enter' && resetPassword()} />
+                  <Button onClick={resetPassword} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 rounded-full h-12">{loading ? 'Updating...' : 'Update Password'}</Button>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>

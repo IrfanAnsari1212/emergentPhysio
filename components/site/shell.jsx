@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Phone, MessageCircle, MapPin, Mail, Activity, Menu, X, Calendar as CalendarIcon, ArrowRight,
+  Lock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'

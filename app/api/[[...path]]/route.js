@@ -1,10 +1,19 @@
 import { NextResponse } from 'next/server'
 import { MongoClient } from 'mongodb'
 import { v4 as uuidv4 } from 'uuid'
+import { Resend } from 'resend'
 
 const MONGO_URL = process.env.MONGO_URL
 const DB_NAME = process.env.DB_NAME && process.env.DB_NAME !== 'your_database_name' ? process.env.DB_NAME : 'physio_clinic'
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'
+const ENV_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Ashwani@123'
+const RECOVERY_EMAIL = process.env.ADMIN_RECOVERY_EMAIL || 'irfanking8215@gmail.com'
+const RESEND_API_KEY = process.env.RESEND_API_KEY
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
+
+const getAdminPassword = async (db) => {
+  const a = await db.collection('admin_auth').findOne({ _key: 'main' })
+  return a?.password || ENV_ADMIN_PASSWORD
+}
 
 let cachedClient = null
 async function getDb() {
@@ -353,8 +362,65 @@ async function handler(request, ctx) {
     // ---------- ADMIN ----------
     if (route === '/admin/login' && method === 'POST') {
       const body = await request.json()
-      if (body.password === ADMIN_PASSWORD) return json({ success: true, token: uuidv4() })
+      const correctPw = await getAdminPassword(db)
+      if (body.password === correctPw) {
+        const remember = body.remember === true
+        const ttlMs = remember ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000
+        return json({ success: true, token: uuidv4(), expiresAt: Date.now() + ttlMs, remember })
+      }
       return err('Invalid password', 401)
+    }
+    if (route === '/admin/forgot-password' && method === 'POST') {
+      if (!resend) return err('Email service not configured', 500)
+      const otp = String(Math.floor(100000 + Math.random() * 900000))
+      const resetToken = uuidv4()
+      const expiresAt = Date.now() + 10 * 60 * 1000
+      await db.collection('admin_otps').deleteMany({})
+      await db.collection('admin_otps').insertOne({ otp, resetToken, expiresAt, createdAt: new Date().toISOString() })
+      try {
+        await resend.emails.send({
+          from: 'Shri Ramvidya CMS <onboarding@resend.dev>',
+          to: [RECOVERY_EMAIL],
+          subject: `Your Admin Password Reset Code: ${otp}`,
+          html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px;background:#fff">
+            <div style="text-align:center;margin-bottom:24px">
+              <div style="display:inline-block;width:48px;height:48px;background:#2563eb;border-radius:12px;line-height:48px;color:#fff;font-weight:700;font-size:18px">SR</div>
+              <h1 style="color:#0f172a;margin:12px 0 4px">Shri Ramvidya CMS</h1>
+              <p style="color:#64748b;margin:0">Admin Password Reset</p>
+            </div>
+            <p style="color:#334155;font-size:14px">Hello,</p>
+            <p style="color:#334155;font-size:14px">You requested to reset the admin password for the Shri Ramvidya clinic website. Use the verification code below:</p>
+            <div style="text-align:center;margin:24px 0;padding:20px;background:#f1f5f9;border-radius:12px">
+              <div style="font-family:'Courier New',monospace;font-size:36px;font-weight:700;color:#2563eb;letter-spacing:8px">${otp}</div>
+              <p style="color:#64748b;font-size:12px;margin:8px 0 0">This code expires in 10 minutes</p>
+            </div>
+            <p style="color:#334155;font-size:14px">If you did not request this, you can safely ignore this email \u2014 your password will not be changed.</p>
+            <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0">
+            <p style="color:#94a3b8;font-size:12px;text-align:center;margin:0">Shri Ramvidya Electro Acupressure Neuro Therapy & Aayu Pharmacy<br/>Near PNB Bank, Dudhi, Kushinagar, UP</p>
+          </div>`,
+        })
+        return json({ success: true, message: `OTP sent to ${RECOVERY_EMAIL.replace(/^(.{3}).+(@.+)$/, '$1***$2')}` })
+      } catch (e) {
+        console.error('Resend error:', e)
+        return err('Failed to send email: ' + (e.message || 'unknown'), 500)
+      }
+    }
+    if (route === '/admin/verify-otp' && method === 'POST') {
+      const body = await request.json()
+      const rec = await db.collection('admin_otps').findOne({ otp: body.otp })
+      if (!rec) return err('Invalid OTP', 400)
+      if (rec.expiresAt < Date.now()) { await db.collection('admin_otps').deleteOne({ _id: rec._id }); return err('OTP expired', 400) }
+      return json({ success: true, resetToken: rec.resetToken })
+    }
+    if (route === '/admin/reset-password' && method === 'POST') {
+      const body = await request.json()
+      if (!body.newPassword || body.newPassword.length < 6) return err('Password must be at least 6 characters')
+      const rec = await db.collection('admin_otps').findOne({ resetToken: body.resetToken })
+      if (!rec) return err('Invalid or expired reset token', 400)
+      if (rec.expiresAt < Date.now()) { await db.collection('admin_otps').deleteOne({ _id: rec._id }); return err('Reset token expired', 400) }
+      await db.collection('admin_auth').updateOne({ _key: 'main' }, { $set: { password: body.newPassword, updatedAt: new Date().toISOString() } }, { upsert: true })
+      await db.collection('admin_otps').deleteMany({})
+      return json({ success: true })
     }
     if (route === '/admin/stats' && method === 'GET') {
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
