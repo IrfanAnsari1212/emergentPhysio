@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 215 28% 17%;
+    --card: 0 0% 100%;
+    --card-foreground: 215 28% 17%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 28% 17%;
+    --primary: 211 100% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 215 28% 17%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 199 89% 48%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 211 100% 45%;
+    --radius: 0.75rem;
+  }
+}
+
+* { border-color: hsl(var(--border)); }
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+}
+.font-display { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; }
+
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(59,130,246,0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(59,130,246,0.06) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+.bg-radial-fade {
+  background: radial-gradient(ellipse at top, rgba(59,130,246,0.12), transparent 60%);
+}
+.text-gradient {
+  background: linear-gradient(90deg, #0066ff 0%, #00b4d8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+
+@keyframes float {
+  0%,100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+.animate-float { animation: float 4s ease-in-out infinite; }
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.6); }
+  70% { box-shadow: 0 0 0 14px rgba(34,197,94,0); }
+  100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+}
+.pulse-ring { animation: pulse-ring 2s infinite; }
