@@ -3,12 +3,12 @@ import { Providers } from './providers'
 import { Toaster } from '@/components/ui/sonner'
 
 export const metadata = {
-  title: 'Apex Physio Care | Best Physiotherapy Clinic | Dr. Rajesh Kumar',
-  description: 'Apex Physio Care is a trusted physiotherapy clinic offering expert treatment for back pain, knee pain, sports injuries, stroke rehabilitation, and home visit physiotherapy. Book your appointment today.',
-  keywords: 'physiotherapy clinic, back pain treatment, knee pain, sports injury, stroke rehabilitation, home visit physiotherapy, best physiotherapist',
+  title: 'Shri Ramvidya Electro Acupressure Neuro Therapy & Aayu Pharmacy | Dudhi, Kushinagar',
+  description: 'Shri Ramvidya offers expert Electro Acupressure & Neuro Therapy in Dudhi, Kushinagar for back pain, paralysis, stroke recovery, sciatica, knee & joint pain. Drug-free, scientifically proven. Book your appointment today.',
+  keywords: 'acupressure clinic Kushinagar, neuro therapy Dudhi, back pain treatment, paralysis recovery, sciatica, electro acupressure, Shri Ramvidya, Aayu Pharmacy, Dr. Ashwani Kumar Gupta',
   openGraph: {
-    title: 'Apex Physio Care | Trusted Physiotherapy Clinic',
-    description: 'Expert physiotherapy treatment with 15+ years of experience. Book your appointment online.',
+    title: 'Shri Ramvidya Electro Acupressure Neuro Therapy & Aayu Pharmacy',
+    description: 'Trusted natural therapy clinic in Dudhi, Kushinagar. Expert care for chronic pain and neurological conditions.',
     type: 'website',
   },
 }

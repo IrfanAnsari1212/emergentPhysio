@@ -272,6 +272,117 @@ backend:
       - working: true
         agent: "testing"
         comment: "GET /api/admin/stats returns 200 with all required fields (totalAppointments, pendingAppointments, todayAppointments, homeVisits, newEnquiries) as numbers. Test passed."
+      - working: true
+        agent: "testing"
+        comment: "GET /api/admin/stats now includes activeDoctors field. Returns 200 with all 6 fields as numbers. activeDoctors=3 (reflecting 3 default seeded doctors). Test passed."
+
+  - task: "Get default seeded doctors"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "GET /api/doctors returns 200 with 3 default seeded doctors (Dr. Ashwani Kumar Gupta, Dr. Chhotelal Singh, Dr. Santosh Singh). All have required fields (name, specialization, experience, id). Auto-seeding working correctly. Test passed."
+
+  - task: "Get all doctors including inactive"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "GET /api/doctors?all=1 returns 200 with array including both active and inactive doctors. Query parameter working correctly. Test passed."
+
+  - task: "Create doctor with valid data"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "POST /api/doctors with valid data (name, title, specialization, experience, photo, active, order) returns 200 with success:true, doctor object with UUID id, active=true by default. Test passed."
+
+  - task: "Create doctor validation"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "POST /api/doctors without name returns 400 with error 'Name required'. Validation working correctly. Test passed."
+
+  - task: "Disable doctor"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "PATCH /api/doctors/{id} with {active:false} returns 200 with success:true and updated doctor object. Doctor successfully disabled. Test passed."
+
+  - task: "Verify disabled doctor visibility"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "After disabling doctor: GET /api/doctors (without ?all=1) does NOT include disabled doctor. GET /api/doctors?all=1 DOES include disabled doctor. Active filter working correctly. Test passed."
+
+  - task: "Update doctor fields"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "PATCH /api/doctors/{id} with {name:'Updated Name', specialization:'New Spec'} returns 200 with success:true. Verified updates persist by fetching doctor again. Test passed."
+
+  - task: "Update doctor photo"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "PATCH /api/doctors/{id} with {photo:'data:image/png;base64,...'} returns 200 with success:true. Verified base64 photo string stored correctly. Test passed."
+
+  - task: "Delete doctor"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "DELETE /api/doctors/{id} returns 200 with success:true. Verified doctor removed from database (not found in subsequent GET request). Test passed."
 
 frontend:
   - task: "Frontend UI"
@@ -289,12 +400,12 @@ frontend:
 metadata:
   created_by: "testing_agent"
   version: "1.0"
-  test_sequence: 1
+  test_sequence: 2
   run_ui: false
 
 test_plan:
   current_focus:
-    - "All backend endpoints tested and verified"
+    - "All backend endpoints tested and verified including new Doctor Management"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -302,3 +413,5 @@ test_plan:
 agent_communication:
   - agent: "testing"
     message: "Comprehensive backend API testing completed. All 14 backend endpoints tested with real HTTP requests. Results: 14/14 tests passed. All CRUD operations for appointments, home visits, and contact enquiries working correctly. Admin authentication and statistics endpoint functioning as expected. No critical issues found."
+  - agent: "testing"
+    message: "Doctor Management endpoints testing completed. All 10 new doctor endpoints tested successfully. Results: 24/24 total tests passed (14 regression + 10 new). Key findings: (1) 3 default doctors auto-seeded correctly with proper names and fields, (2) All CRUD operations working, (3) Active/inactive filtering working correctly, (4) Photo upload (base64) working, (5) Admin stats now includes activeDoctors field. All regression tests passed - no breaking changes. Test data cleaned up."
