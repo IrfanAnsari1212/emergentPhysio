@@ -384,6 +384,103 @@ backend:
         agent: "testing"
         comment: "DELETE /api/doctors/{id} returns 200 with success:true. Verified doctor removed from database (not found in subsequent GET request). Test passed."
 
+
+  - task: "Settings GET endpoint"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "GET /api/settings returns 200 with settings object containing clinic (name, phones array of 3), content (hero.title, stats array), seo (home object). Auto-seeded data present. Test passed."
+
+  - task: "Settings PUT endpoint"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "PUT /api/settings successfully updates settings. Verified update persists via GET. Successfully restored original settings. Test passed."
+
+  - task: "CMS Services CRUD operations"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "CMS Services endpoints fully functional: (1) GET /api/cms-services returns empty array initially, (2) POST creates service with auto-generated slug and UUID, (3) POST without title returns 400 validation error, (4) PATCH updates service fields including active status, (5) Active filtering works (default GET excludes inactive, ?all=1 includes all), (6) DELETE removes service. All tests passed."
+
+  - task: "Testimonials CRUD operations"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Testimonials endpoints fully functional: (1) GET /api/testimonials returns 6 auto-seeded testimonials, (2) POST creates testimonial with UUID, (3) POST without patientName or review returns 400 validation error, (4) PATCH updates testimonial including active status, (5) Active filtering works correctly (inactive testimonials hidden from default GET), (6) DELETE removes testimonial. All tests passed."
+
+  - task: "Blogs CRUD operations"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Blogs endpoints fully functional: (1) GET /api/blogs returns empty array initially, (2) POST creates blog with auto-generated slug and UUID, (3) POST with duplicate slug returns 409 conflict error, (4) Draft filtering works (unpublished blogs hidden from default GET, visible with ?all=1), (5) PATCH with published=true sets publishedAt timestamp and makes blog visible, (6) GET /api/blogs/slug/{slug} retrieves blog by slug, (7) DELETE removes blog. All tests passed."
+
+  - task: "Gallery CRUD operations"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Gallery endpoints fully functional: (1) GET /api/gallery returns empty array initially, (2) POST creates gallery image with UUID, (3) POST without imageUrl returns 400 validation error, (4) GET /api/gallery?category=clinic filters by category correctly, (5) GET /api/gallery/categories returns array of unique categories, (6) DELETE removes gallery image. All tests passed."
+
+  - task: "Admin stats updated with CMS fields"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "GET /api/admin/stats now includes new CMS fields: testimonials, blogs, services, gallery (all numbers). Verified all fields present and returning correct counts. Test passed."
+
+  - task: "Regression - existing endpoints"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Regression tests passed: (1) GET /api/health returns 200 with ok:true, (2) GET /api/doctors returns 3 seeded doctors, (3) POST /api/appointments creates appointment successfully, (4) POST /api/admin/login with 'admin123' returns token. No breaking changes detected. All tests passed."
+
 frontend:
   - task: "Frontend UI"
     implemented: true
@@ -400,12 +497,12 @@ frontend:
 metadata:
   created_by: "testing_agent"
   version: "1.0"
-  test_sequence: 2
+  test_sequence: 3
   run_ui: false
 
 test_plan:
   current_focus:
-    - "All backend endpoints tested and verified including new Doctor Management"
+    - "All backend endpoints tested and verified including CMS endpoints"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -415,3 +512,5 @@ agent_communication:
     message: "Comprehensive backend API testing completed. All 14 backend endpoints tested with real HTTP requests. Results: 14/14 tests passed. All CRUD operations for appointments, home visits, and contact enquiries working correctly. Admin authentication and statistics endpoint functioning as expected. No critical issues found."
   - agent: "testing"
     message: "Doctor Management endpoints testing completed. All 10 new doctor endpoints tested successfully. Results: 24/24 total tests passed (14 regression + 10 new). Key findings: (1) 3 default doctors auto-seeded correctly with proper names and fields, (2) All CRUD operations working, (3) Active/inactive filtering working correctly, (4) Photo upload (base64) working, (5) Admin stats now includes activeDoctors field. All regression tests passed - no breaking changes. Test data cleaned up."
+  - agent: "testing"
+    message: "CMS endpoints testing completed. All 31 new CMS endpoint tests passed successfully (100% success rate). Tested: (1) Settings GET/PUT with proper data structure and restoration, (2) CMS Services full CRUD with auto-slug generation and active filtering, (3) Testimonials CRUD with 6 auto-seeded records and validation, (4) Blogs CRUD with draft/published filtering, slug-based retrieval, and duplicate slug prevention, (5) Gallery CRUD with category filtering and categories endpoint, (6) Admin stats updated with 4 new CMS fields (testimonials, blogs, services, gallery), (7) All regression tests passed (health, doctors, appointments, admin login). No breaking changes. All test data cleaned up. All endpoints production-ready."

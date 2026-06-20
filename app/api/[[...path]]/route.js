@@ -17,6 +17,7 @@ async function getDb() {
 
 const json = (data, status = 200) => NextResponse.json(data, { status })
 const err = (msg, status = 400) => NextResponse.json({ error: msg }, { status })
+const clean = (doc) => { if (!doc) return doc; const { _id, ...r } = doc; return r }
 
 const DEFAULT_DOCTORS = [
   { name: 'Dr. Ashwani Kumar Gupta', title: 'M.D.A.M. Accu Therapy (Raj.), B.Pharma, M.H.A.', specialization: 'Senior Acupressure & Neuro Therapist', experience: '15+ years', photo: '', active: true, order: 1 },
@@ -24,13 +25,73 @@ const DEFAULT_DOCTORS = [
   { name: 'Dr. Santosh Singh', title: 'M.D.A.M. Accu Therapy (Raj.)', specialization: 'Neuro Therapy Specialist', experience: '10+ years', photo: '', active: true, order: 3 },
 ]
 
-async function ensureDoctorsSeeded(db) {
-  const count = await db.collection('doctors').countDocuments({})
-  if (count === 0) {
-    const now = new Date().toISOString()
-    await db.collection('doctors').insertMany(DEFAULT_DOCTORS.map(d => ({ id: uuidv4(), ...d, createdAt: now })))
-  }
+const DEFAULT_TESTIMONIALS = [
+  { patientName: 'Rajesh Yadav', rating: 5, review: 'After years of back pain, Shri Ramvidya acupressure therapy gave me relief in just 3 weeks. No more medicines!', role: 'Farmer, Dudhi', photo: '', active: true, order: 1 },
+  { patientName: 'Sunita Devi', rating: 5, review: 'My mother had paralysis after stroke. The doctors here brought her back to walking again. Truly blessed!', role: 'Daughter', photo: '', active: true, order: 2 },
+  { patientName: 'Ankit Singh', rating: 5, review: 'Best clinic in Kushinagar. Frozen shoulder cured completely. Highly professional doctors.', role: 'Businessman', photo: '', active: true, order: 3 },
+  { patientName: 'Geeta Sharma', rating: 5, review: 'Sciatica was unbearable. After 2 months of treatment, I am completely pain-free. Thank you doctors!', role: 'Homemaker', photo: '', active: true, order: 4 },
+  { patientName: 'Mukesh Patel', rating: 5, review: 'Affordable, effective and caring team. My knee pain is gone after 15 sessions. Highly recommended.', role: 'Shopkeeper', photo: '', active: true, order: 5 },
+  { patientName: 'Pooja Verma', rating: 5, review: 'Migraine of 5 years cured with neuro therapy. Could not believe it works so well without medicines.', role: 'Teacher', photo: '', active: true, order: 6 },
+]
+
+const DEFAULT_SETTINGS = {
+  _key: 'global',
+  clinic: {
+    name: 'Shri Ramvidya',
+    fullName: 'Shri Ramvidya Electro Acupressure Neuro Therapy & Aayu Pharmacy',
+    tagline: 'Heal Naturally. Live Pain-Free.',
+    description: 'Trusted natural therapy clinic in Dudhi, Kushinagar offering Electro Acupressure & Neuro Therapy for back pain, paralysis, stroke recovery, sciatica, knee and joint pain.',
+    logoUrl: '',
+    phones: ['7300846971', '8601125240', '9161151496'],
+    whatsapp: '917300846971',
+    email: 'info@shriramvidya.in',
+    address: 'Near PNB Bank, Dudhi',
+    city: 'Kushinagar',
+    region: 'Uttar Pradesh',
+    postal: '274403',
+    timings: 'Mon - Sat: 9:00 AM - 8:00 PM | Sun: 9:00 AM - 1:00 PM',
+    mapsLink: 'https://maps.app.goo.gl/1m8kyhL8UfGWiZyW8',
+    mapsEmbed: 'https://www.google.com/maps?q=PNB+Bank+Dudhi+Kushinagar+Uttar+Pradesh&output=embed',
+    social: { facebook: '', instagram: '', youtube: '', twitter: '' },
+  },
+  content: {
+    hero: { eyebrow: 'Trusted Clinic in Kushinagar', title: 'Heal Naturally. Live Pain-Free.', subtitle: 'Expert Electro Acupressure & Neuro Therapy for back pain, paralysis, stroke recovery, sciatica, knee & joint pain — drug-free, scientifically proven.' },
+    about: { eyebrow: 'About Our Clinic', title: 'Trusted Healing Through Acupressure & Neuro Therapy', paragraph1: 'Shri Ramvidya is a leading therapy clinic located near PNB Bank, Dudhi, Kushinagar. We offer scientifically-backed, drug-free treatment for chronic pain, paralysis, stroke recovery and many other conditions.', paragraph2: 'Our team of certified M.D.A.M. Accu Therapists has helped over 5000 patients reclaim a pain-free life.' },
+    stats: [
+      { value: '5000+', label: 'Happy Patients' },
+      { value: '15+', label: 'Years Experience' },
+      { value: '3', label: 'Expert Doctors' },
+      { value: '98%', label: 'Success Rate' },
+    ],
+    whyUs: { eyebrow: 'Why Choose Us', title: 'The Shri Ramvidya Difference', subtitle: 'What makes us the most trusted therapy clinic in Kushinagar.' },
+    cta: { title: 'Start Your Healing Journey Today', subtitle: 'Book your appointment online, via WhatsApp, or call us directly. Home visits available.' },
+    footer: { tagline: 'Trusted natural therapy clinic in Kushinagar, Uttar Pradesh.' },
+  },
+  seo: {
+    home: {
+      title: 'Shri Ramvidya | Electro Acupressure & Neuro Therapy Clinic in Dudhi, Kushinagar',
+      description: 'Trusted natural therapy clinic offering expert treatment for back pain, paralysis, stroke recovery, sciatica & joint pain in Dudhi, Kushinagar.',
+      keywords: 'physiotherapy clinic Kushinagar, acupressure Dudhi, neuro therapy, back pain, paralysis recovery',
+      ogImage: '',
+    },
+    services: { title: 'Services | 18+ Specialized Therapy Treatments', description: 'Explore our specialized treatments.' },
+    blog: { title: 'Blog | Health Tips & Recovery Stories', description: 'Read articles on natural healing and patient recovery stories.' },
+  },
 }
+
+async function ensureSeeded(db) {
+  const [s, d, t] = await Promise.all([
+    db.collection('settings').countDocuments({ _key: 'global' }),
+    db.collection('doctors').countDocuments({}),
+    db.collection('testimonials').countDocuments({}),
+  ])
+  const now = new Date().toISOString()
+  if (s === 0) await db.collection('settings').insertOne({ ...DEFAULT_SETTINGS, updatedAt: now })
+  if (d === 0) await db.collection('doctors').insertMany(DEFAULT_DOCTORS.map(x => ({ id: uuidv4(), ...x, createdAt: now })))
+  if (t === 0) await db.collection('testimonials').insertMany(DEFAULT_TESTIMONIALS.map(x => ({ id: uuidv4(), ...x, createdAt: now })))
+}
+
+const slugify = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80)
 
 async function handler(request, ctx) {
   const params = await ctx.params
@@ -40,22 +101,35 @@ async function handler(request, ctx) {
 
   try {
     const db = await getDb()
+    await ensureSeeded(db)
 
-    if (route === '/' || route === '/health') return json({ ok: true, service: 'clinic-api' })
+    if (route === '/' || route === '/health') return json({ ok: true, service: 'clinic-cms-api' })
+
+    // ---------- SETTINGS (single doc CMS) ----------
+    if (route === '/settings' && method === 'GET') {
+      const s = await db.collection('settings').findOne({ _key: 'global' })
+      return json({ settings: clean(s) })
+    }
+    if (route === '/settings' && method === 'PUT') {
+      const body = await request.json()
+      delete body._id; delete body._key
+      await db.collection('settings').updateOne({ _key: 'global' }, { $set: { ...body, updatedAt: new Date().toISOString() } }, { upsert: true })
+      const s = await db.collection('settings').findOne({ _key: 'global' })
+      return json({ success: true, settings: clean(s) })
+    }
 
     // ---------- APPOINTMENTS ----------
     if (route === '/appointments' && method === 'POST') {
       const body = await request.json()
       const { patientName, phone, email, service, date, time, notes } = body
       if (!patientName || !phone || !service || !date || !time) return err('Missing required fields')
-      const doc = { id: uuidv4(), patientName, phone, email: email || '', service, date, time, notes: notes || '', status: 'pending', type: 'clinic', createdAt: new Date().toISOString() }
+      const doc = { id: uuidv4(), patientName, phone, email: email || '', service, date, time, notes: notes || '', status: 'pending', createdAt: new Date().toISOString() }
       await db.collection('appointments').insertOne(doc)
-      const { _id, ...clean } = doc
-      return json({ success: true, appointment: clean })
+      return json({ success: true, appointment: clean(doc) })
     }
     if (route === '/appointments' && method === 'GET') {
-      const items = await db.collection('appointments').find({}).sort({ createdAt: -1 }).limit(500).toArray()
-      return json({ appointments: items.map(({ _id, ...r }) => r) })
+      const items = await db.collection('appointments').find({}).sort({ createdAt: -1 }).limit(1000).toArray()
+      return json({ appointments: items.map(clean) })
     }
     if (segs[0] === 'appointments' && segs[1] && method === 'PATCH') {
       const body = await request.json()
@@ -74,16 +148,19 @@ async function handler(request, ctx) {
       if (!patientName || !phone || !address || !preferredDate) return err('Missing required fields')
       const doc = { id: uuidv4(), patientName, phone, address, treatment: treatment || '', preferredDate, preferredTime: preferredTime || '', notes: notes || '', status: 'pending', createdAt: new Date().toISOString() }
       await db.collection('home_visits').insertOne(doc)
-      const { _id, ...clean } = doc
-      return json({ success: true, request: clean })
+      return json({ success: true, request: clean(doc) })
     }
     if (route === '/home-visits' && method === 'GET') {
       const items = await db.collection('home_visits').find({}).sort({ createdAt: -1 }).toArray()
-      return json({ visits: items.map(({ _id, ...r }) => r) })
+      return json({ visits: items.map(clean) })
     }
     if (segs[0] === 'home-visits' && segs[1] && method === 'PATCH') {
       const body = await request.json()
       await db.collection('home_visits').updateOne({ id: segs[1] }, { $set: { status: body.status } })
+      return json({ success: true })
+    }
+    if (segs[0] === 'home-visits' && segs[1] && method === 'DELETE') {
+      await db.collection('home_visits').deleteOne({ id: segs[1] })
       return json({ success: true })
     }
 
@@ -94,49 +171,182 @@ async function handler(request, ctx) {
       if (!name || !phone || !message) return err('Missing required fields')
       const doc = { id: uuidv4(), name, phone, email: email || '', message, status: 'new', createdAt: new Date().toISOString() }
       await db.collection('contacts').insertOne(doc)
-      const { _id, ...clean } = doc
-      return json({ success: true, enquiry: clean })
+      return json({ success: true, enquiry: clean(doc) })
     }
     if (route === '/contact' && method === 'GET') {
       const items = await db.collection('contacts').find({}).sort({ createdAt: -1 }).toArray()
-      return json({ enquiries: items.map(({ _id, ...r }) => r) })
+      return json({ enquiries: items.map(clean) })
     }
     if (segs[0] === 'contact' && segs[1] && method === 'PATCH') {
       const body = await request.json()
       await db.collection('contacts').updateOne({ id: segs[1] }, { $set: { status: body.status } })
       return json({ success: true })
     }
+    if (segs[0] === 'contact' && segs[1] && method === 'DELETE') {
+      await db.collection('contacts').deleteOne({ id: segs[1] })
+      return json({ success: true })
+    }
 
     // ---------- DOCTORS ----------
     if (route === '/doctors' && method === 'GET') {
-      await ensureDoctorsSeeded(db)
       const url = new URL(request.url)
-      const includeInactive = url.searchParams.get('all') === '1'
-      const q = includeInactive ? {} : { active: true }
+      const all = url.searchParams.get('all') === '1'
+      const q = all ? {} : { active: true }
       const items = await db.collection('doctors').find(q).sort({ order: 1, createdAt: 1 }).toArray()
-      return json({ doctors: items.map(({ _id, ...r }) => r) })
+      return json({ doctors: items.map(clean) })
     }
     if (route === '/doctors' && method === 'POST') {
       const body = await request.json()
-      const { name, title, specialization, experience, photo, active, order } = body
-      if (!name) return err('Name required')
-      const doc = { id: uuidv4(), name, title: title || '', specialization: specialization || '', experience: experience || '', photo: photo || '', active: active !== false, order: typeof order === 'number' ? order : 99, createdAt: new Date().toISOString() }
+      if (!body.name) return err('Name required')
+      const doc = { id: uuidv4(), name: body.name, title: body.title || '', specialization: body.specialization || '', experience: body.experience || '', timings: body.timings || '', photo: body.photo || '', active: body.active !== false, order: body.order ?? 99, createdAt: new Date().toISOString() }
       await db.collection('doctors').insertOne(doc)
-      const { _id, ...clean } = doc
-      return json({ success: true, doctor: clean })
+      return json({ success: true, doctor: clean(doc) })
     }
     if (segs[0] === 'doctors' && segs[1] && method === 'PATCH') {
       const body = await request.json()
-      const allowed = ['name', 'title', 'specialization', 'experience', 'photo', 'active', 'order']
-      const update = {}
-      for (const k of allowed) if (k in body) update[k] = body[k]
+      const allowed = ['name', 'title', 'specialization', 'experience', 'timings', 'photo', 'active', 'order']
+      const update = {}; for (const k of allowed) if (k in body) update[k] = body[k]
       await db.collection('doctors').updateOne({ id: segs[1] }, { $set: update })
-      const doc = await db.collection('doctors').findOne({ id: segs[1] })
-      const { _id, ...clean } = doc || {}
-      return json({ success: true, doctor: clean })
+      const d = await db.collection('doctors').findOne({ id: segs[1] })
+      return json({ success: true, doctor: clean(d) })
     }
     if (segs[0] === 'doctors' && segs[1] && method === 'DELETE') {
       await db.collection('doctors').deleteOne({ id: segs[1] })
+      return json({ success: true })
+    }
+
+    // ---------- CUSTOM SERVICES (admin-created) ----------
+    if (route === '/cms-services' && method === 'GET') {
+      const url = new URL(request.url)
+      const all = url.searchParams.get('all') === '1'
+      const q = all ? {} : { active: true }
+      const items = await db.collection('cms_services').find(q).sort({ order: 1, createdAt: 1 }).toArray()
+      return json({ services: items.map(clean) })
+    }
+    if (route === '/cms-services' && method === 'POST') {
+      const body = await request.json()
+      if (!body.title) return err('Title required')
+      const doc = {
+        id: uuidv4(), slug: body.slug || slugify(body.title), title: body.title, short: body.short || '',
+        description: body.description || '', image: body.image || '', iconName: body.iconName || 'Activity',
+        symptoms: body.symptoms || [], benefits: body.benefits || [], causes: body.causes || [], process: body.process || [],
+        seoTitle: body.seoTitle || '', seoDescription: body.seoDescription || '',
+        active: body.active !== false, order: body.order ?? 99,
+        createdAt: new Date().toISOString(),
+      }
+      await db.collection('cms_services').insertOne(doc)
+      return json({ success: true, service: clean(doc) })
+    }
+    if (segs[0] === 'cms-services' && segs[1] && method === 'PATCH') {
+      const body = await request.json()
+      const allowed = ['slug', 'title', 'short', 'description', 'image', 'iconName', 'symptoms', 'benefits', 'causes', 'process', 'seoTitle', 'seoDescription', 'active', 'order']
+      const update = {}; for (const k of allowed) if (k in body) update[k] = body[k]
+      await db.collection('cms_services').updateOne({ id: segs[1] }, { $set: update })
+      const d = await db.collection('cms_services').findOne({ id: segs[1] })
+      return json({ success: true, service: clean(d) })
+    }
+    if (segs[0] === 'cms-services' && segs[1] && method === 'DELETE') {
+      await db.collection('cms_services').deleteOne({ id: segs[1] })
+      return json({ success: true })
+    }
+
+    // ---------- TESTIMONIALS ----------
+    if (route === '/testimonials' && method === 'GET') {
+      const url = new URL(request.url)
+      const all = url.searchParams.get('all') === '1'
+      const q = all ? {} : { active: true }
+      const items = await db.collection('testimonials').find(q).sort({ order: 1, createdAt: -1 }).toArray()
+      return json({ testimonials: items.map(clean) })
+    }
+    if (route === '/testimonials' && method === 'POST') {
+      const body = await request.json()
+      if (!body.patientName || !body.review) return err('Patient name and review required')
+      const doc = { id: uuidv4(), patientName: body.patientName, rating: body.rating || 5, review: body.review, role: body.role || '', photo: body.photo || '', active: body.active !== false, order: body.order ?? 99, createdAt: new Date().toISOString() }
+      await db.collection('testimonials').insertOne(doc)
+      return json({ success: true, testimonial: clean(doc) })
+    }
+    if (segs[0] === 'testimonials' && segs[1] && method === 'PATCH') {
+      const body = await request.json()
+      const allowed = ['patientName', 'rating', 'review', 'role', 'photo', 'active', 'order']
+      const update = {}; for (const k of allowed) if (k in body) update[k] = body[k]
+      await db.collection('testimonials').updateOne({ id: segs[1] }, { $set: update })
+      const d = await db.collection('testimonials').findOne({ id: segs[1] })
+      return json({ success: true, testimonial: clean(d) })
+    }
+    if (segs[0] === 'testimonials' && segs[1] && method === 'DELETE') {
+      await db.collection('testimonials').deleteOne({ id: segs[1] })
+      return json({ success: true })
+    }
+
+    // ---------- GALLERY ----------
+    if (route === '/gallery' && method === 'GET') {
+      const url = new URL(request.url)
+      const category = url.searchParams.get('category')
+      const q = category ? { category } : {}
+      const items = await db.collection('gallery').find(q).sort({ createdAt: -1 }).toArray()
+      return json({ images: items.map(clean) })
+    }
+    if (route === '/gallery' && method === 'POST') {
+      const body = await request.json()
+      if (!body.imageUrl) return err('imageUrl required')
+      const doc = { id: uuidv4(), imageUrl: body.imageUrl, title: body.title || '', category: body.category || 'general', createdAt: new Date().toISOString() }
+      await db.collection('gallery').insertOne(doc)
+      return json({ success: true, image: clean(doc) })
+    }
+    if (segs[0] === 'gallery' && segs[1] && method === 'PATCH') {
+      const body = await request.json()
+      const allowed = ['title', 'category', 'imageUrl']
+      const update = {}; for (const k of allowed) if (k in body) update[k] = body[k]
+      await db.collection('gallery').updateOne({ id: segs[1] }, { $set: update })
+      return json({ success: true })
+    }
+    if (segs[0] === 'gallery' && segs[1] && method === 'DELETE') {
+      await db.collection('gallery').deleteOne({ id: segs[1] })
+      return json({ success: true })
+    }
+    if (route === '/gallery/categories' && method === 'GET') {
+      const cats = await db.collection('gallery').distinct('category')
+      return json({ categories: cats })
+    }
+
+    // ---------- BLOGS ----------
+    if (route === '/blogs' && method === 'GET') {
+      const url = new URL(request.url)
+      const all = url.searchParams.get('all') === '1'
+      const q = all ? {} : { published: true }
+      const items = await db.collection('blogs').find(q).sort({ publishedAt: -1, createdAt: -1 }).toArray()
+      return json({ blogs: items.map(clean) })
+    }
+    if (segs[0] === 'blogs' && segs[1] === 'slug' && segs[2] && method === 'GET') {
+      const b = await db.collection('blogs').findOne({ slug: segs[2] })
+      if (!b) return err('Not found', 404)
+      return json({ blog: clean(b) })
+    }
+    if (route === '/blogs' && method === 'POST') {
+      const body = await request.json()
+      if (!body.title) return err('Title required')
+      const slug = body.slug || slugify(body.title)
+      const exists = await db.collection('blogs').findOne({ slug })
+      if (exists) return err('Slug already exists', 409)
+      const now = new Date().toISOString()
+      const doc = { id: uuidv4(), slug, title: body.title, excerpt: body.excerpt || '', content: body.content || '', featuredImage: body.featuredImage || '', category: body.category || 'General', author: body.author || 'Admin', tags: body.tags || [], seoTitle: body.seoTitle || '', seoDescription: body.seoDescription || '', published: body.published === true, publishedAt: body.published ? now : null, createdAt: now }
+      await db.collection('blogs').insertOne(doc)
+      return json({ success: true, blog: clean(doc) })
+    }
+    if (segs[0] === 'blogs' && segs[1] && method === 'PATCH') {
+      const body = await request.json()
+      const allowed = ['slug', 'title', 'excerpt', 'content', 'featuredImage', 'category', 'author', 'tags', 'seoTitle', 'seoDescription', 'published']
+      const update = {}; for (const k of allowed) if (k in body) update[k] = body[k]
+      if ('published' in body) {
+        const prev = await db.collection('blogs').findOne({ id: segs[1] })
+        if (body.published && !prev?.publishedAt) update.publishedAt = new Date().toISOString()
+      }
+      await db.collection('blogs').updateOne({ id: segs[1] }, { $set: update })
+      const d = await db.collection('blogs').findOne({ id: segs[1] })
+      return json({ success: true, blog: clean(d) })
+    }
+    if (segs[0] === 'blogs' && segs[1] && method === 'DELETE') {
+      await db.collection('blogs').deleteOne({ id: segs[1] })
       return json({ success: true })
     }
 
@@ -149,15 +359,23 @@ async function handler(request, ctx) {
     if (route === '/admin/stats' && method === 'GET') {
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
       const todayIso = todayStart.toISOString().slice(0, 10)
-      const [totalAppts, pending, todays, visits, contacts, doctors] = await Promise.all([
+      const [totalAppts, pending, todays, visits, contacts, doctors, testimonials, blogs, services, gallery] = await Promise.all([
         db.collection('appointments').countDocuments({}),
         db.collection('appointments').countDocuments({ status: 'pending' }),
         db.collection('appointments').countDocuments({ date: todayIso }),
         db.collection('home_visits').countDocuments({}),
         db.collection('contacts').countDocuments({ status: 'new' }),
         db.collection('doctors').countDocuments({ active: true }),
+        db.collection('testimonials').countDocuments({ active: true }),
+        db.collection('blogs').countDocuments({}),
+        db.collection('cms_services').countDocuments({}),
+        db.collection('gallery').countDocuments({}),
       ])
-      return json({ totalAppointments: totalAppts, pendingAppointments: pending, todayAppointments: todays, homeVisits: visits, newEnquiries: contacts, activeDoctors: doctors })
+      return json({
+        totalAppointments: totalAppts, pendingAppointments: pending, todayAppointments: todays,
+        homeVisits: visits, newEnquiries: contacts, activeDoctors: doctors,
+        testimonials, blogs, services, gallery,
+      })
     }
 
     return err('Not found', 404)
@@ -172,7 +390,5 @@ export const POST = handler
 export const PUT = handler
 export const PATCH = handler
 export const DELETE = handler
-
-// Allow larger payloads (doctor photo as base64)
 export const maxDuration = 30
 export const runtime = 'nodejs'

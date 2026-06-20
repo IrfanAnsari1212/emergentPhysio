@@ -81,7 +81,8 @@ export const Nav = () => {
     { label: 'About', href: '/about' },
     { label: 'Services', href: '/services' },
     { label: 'Doctors', href: '/doctors' },
-    { label: 'Testimonials', href: '/testimonials' },
+    { label: 'Blog', href: '/blog' },
+    { label: 'Gallery', href: '/gallery' },
     { label: 'Contact', href: '/contact' },
   ]
   const isAdmin = pathname?.startsWith('/admin')
@@ -170,6 +171,8 @@ export const Footer = () => {
               <li><Link href="/about" className="hover:text-white">About</Link></li>
               <li><Link href="/services" className="hover:text-white">Services</Link></li>
               <li><Link href="/doctors" className="hover:text-white">Doctors</Link></li>
+              <li><Link href="/blog" className="hover:text-white">Blog</Link></li>
+              <li><Link href="/gallery" className="hover:text-white">Gallery</Link></li>
               <li><Link href="/testimonials" className="hover:text-white">Testimonials</Link></li>
               <li><Link href="/contact" className="hover:text-white">Contact</Link></li>
               <li><Link href="/book" className="hover:text-white">Book Appointment</Link></li>

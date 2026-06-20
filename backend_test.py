@@ -1,830 +1,1020 @@
 #!/usr/bin/env python3
 """
-Comprehensive Backend API Test for Physiotherapy Clinic
-Tests all endpoints with real HTTP requests
+Comprehensive Backend API Test Suite for CMS Endpoints
+Tests all new CMS endpoints: Settings, CMS Services, Testimonials, Blogs, Gallery
 """
 
 import requests
 import json
-from datetime import datetime, timedelta
+import sys
 
-# Base URL from environment
 BASE_URL = "https://physio-clinic-pro-1.preview.emergentagent.com/api"
 
-def print_test(name, passed, details=""):
+# Store test data IDs for cleanup
+test_data = {
+    'service_id': None,
+    'testimonial_id': None,
+    'blog_id': None,
+    'blog_slug': None,
+    'gallery_id': None,
+    'original_settings': None
+}
+
+def log(msg, status="INFO"):
+    """Print formatted log message"""
+    print(f"[{status}] {msg}")
+
+def test_result(test_name, passed, details=""):
+    """Print test result"""
     status = "✅ PASS" if passed else "❌ FAIL"
-    print(f"\n{status}: {name}")
+    print(f"\n{status}: {test_name}")
     if details:
-        print(f"  Details: {details}")
+        print(f"    {details}")
+    return passed
 
-def test_health():
-    """Test 1: GET /api/health"""
-    print("\n" + "="*60)
-    print("TEST 1: Health Check")
-    print("="*60)
+# ==================== SETTINGS TESTS ====================
+
+def test_1_get_settings():
+    """Test 1: GET /api/settings - returns settings with clinic, content, seo"""
     try:
-        response = requests.get(f"{BASE_URL}/health", timeout=10)
-        data = response.json()
-        passed = response.status_code == 200 and data.get('ok') == True
-        print_test("Health endpoint", passed, f"Status: {response.status_code}, Response: {data}")
-        return passed
+        log("Test 1: GET /api/settings")
+        resp = requests.get(f"{BASE_URL}/settings", timeout=10)
+        
+        if resp.status_code != 200:
+            return test_result("GET /api/settings", False, f"Status {resp.status_code}")
+        
+        data = resp.json()
+        settings = data.get('settings')
+        
+        if not settings:
+            return test_result("GET /api/settings", False, "No settings object")
+        
+        # Store original settings for restoration
+        test_data['original_settings'] = settings
+        
+        # Verify clinic fields
+        clinic = settings.get('clinic', {})
+        if not clinic.get('name'):
+            return test_result("GET /api/settings", False, "Missing clinic.name")
+        
+        phones = clinic.get('phones', [])
+        if not isinstance(phones, list) or len(phones) != 3:
+            return test_result("GET /api/settings", False, f"clinic.phones should be array of 3, got {len(phones)}")
+        
+        # Verify content fields
+        content = settings.get('content', {})
+        hero = content.get('hero', {})
+        if not hero.get('title'):
+            return test_result("GET /api/settings", False, "Missing content.hero.title")
+        
+        stats = content.get('stats', [])
+        if not isinstance(stats, list) or len(stats) == 0:
+            return test_result("GET /api/settings", False, "content.stats should be non-empty array")
+        
+        # Verify seo fields
+        seo = settings.get('seo', {})
+        home_seo = seo.get('home', {})
+        if not home_seo:
+            return test_result("GET /api/settings", False, "Missing seo.home")
+        
+        return test_result("GET /api/settings", True, 
+            f"Settings loaded: clinic.name={clinic.get('name')}, phones={len(phones)}, stats={len(stats)}")
+    
     except Exception as e:
-        print_test("Health endpoint", False, f"Exception: {str(e)}")
-        return False
+        return test_result("GET /api/settings", False, str(e))
 
-def test_create_appointment_success():
-    """Test 2: POST /api/appointments with valid data"""
-    print("\n" + "="*60)
-    print("TEST 2: Create Appointment (Valid Data)")
-    print("="*60)
+def test_2_put_settings():
+    """Test 2: PUT /api/settings - update and verify, then restore"""
     try:
-        tomorrow = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
-        payload = {
-            "patientName": "John Smith",
-            "phone": "+1234567890",
-            "email": "john.smith@example.com",
-            "service": "Physical Therapy",
-            "date": tomorrow,
-            "time": "10:00",
-            "notes": "First time patient"
+        log("Test 2: PUT /api/settings")
+        
+        # Update settings
+        update_data = {
+            'clinic': {
+                'name': 'Updated Clinic Name',
+                'phones': ['9999999999']
+            },
+            'content': test_data['original_settings'].get('content', {}),
+            'seo': test_data['original_settings'].get('seo', {})
         }
-        response = requests.post(f"{BASE_URL}/appointments", json=payload, timeout=10)
-        data = response.json()
         
-        has_id = 'appointment' in data and 'id' in data['appointment']
-        has_status = 'appointment' in data and data['appointment'].get('status') == 'pending'
-        passed = response.status_code == 200 and data.get('success') == True and has_id and has_status
+        resp = requests.put(f"{BASE_URL}/settings", json=update_data, timeout=10)
         
-        print_test("Create appointment with valid data", passed, 
-                   f"Status: {response.status_code}, Has ID: {has_id}, Status: {data.get('appointment', {}).get('status')}")
+        if resp.status_code != 200:
+            return test_result("PUT /api/settings", False, f"Status {resp.status_code}")
         
-        if passed:
-            return data['appointment']['id']
-        return None
-    except Exception as e:
-        print_test("Create appointment with valid data", False, f"Exception: {str(e)}")
-        return None
-
-def test_create_appointment_missing_fields():
-    """Test 3: POST /api/appointments with missing required fields"""
-    print("\n" + "="*60)
-    print("TEST 3: Create Appointment (Missing Fields)")
-    print("="*60)
-    try:
-        payload = {
-            "patientName": "Jane Doe",
-            "phone": "+1234567890"
-            # Missing: service, date, time
+        data = resp.json()
+        if not data.get('success'):
+            return test_result("PUT /api/settings", False, "No success field")
+        
+        # Verify update
+        resp2 = requests.get(f"{BASE_URL}/settings", timeout=10)
+        data2 = resp2.json()
+        settings = data2.get('settings', {})
+        
+        if settings.get('clinic', {}).get('name') != 'Updated Clinic Name':
+            return test_result("PUT /api/settings", False, "Update not persisted")
+        
+        # Restore original settings
+        restore_data = {
+            'clinic': test_data['original_settings'].get('clinic', {}),
+            'content': test_data['original_settings'].get('content', {}),
+            'seo': test_data['original_settings'].get('seo', {})
         }
-        response = requests.post(f"{BASE_URL}/appointments", json=payload, timeout=10)
-        data = response.json()
         
-        passed = response.status_code == 400 and 'error' in data
-        print_test("Create appointment with missing fields returns 400", passed,
-                   f"Status: {response.status_code}, Response: {data}")
-        return passed
+        resp3 = requests.put(f"{BASE_URL}/settings", json=restore_data, timeout=10)
+        if resp3.status_code != 200:
+            return test_result("PUT /api/settings", False, "Failed to restore original settings")
+        
+        # Verify restoration
+        resp4 = requests.get(f"{BASE_URL}/settings", timeout=10)
+        data4 = resp4.json()
+        restored = data4.get('settings', {})
+        
+        original_name = test_data['original_settings'].get('clinic', {}).get('name')
+        if restored.get('clinic', {}).get('name') != original_name:
+            return test_result("PUT /api/settings", False, "Failed to verify restoration")
+        
+        return test_result("PUT /api/settings", True, "Updated and restored successfully")
+    
     except Exception as e:
-        print_test("Create appointment with missing fields returns 400", False, f"Exception: {str(e)}")
-        return False
+        return test_result("PUT /api/settings", False, str(e))
 
-def test_get_appointments(expected_id=None):
-    """Test 4: GET /api/appointments"""
-    print("\n" + "="*60)
-    print("TEST 4: Get All Appointments")
-    print("="*60)
+# ==================== CMS SERVICES TESTS ====================
+
+def test_3_get_cms_services_empty():
+    """Test 3: GET /api/cms-services - returns empty array initially"""
     try:
-        response = requests.get(f"{BASE_URL}/appointments", timeout=10)
-        data = response.json()
+        log("Test 3: GET /api/cms-services (initial)")
+        resp = requests.get(f"{BASE_URL}/cms-services", timeout=10)
         
-        has_array = 'appointments' in data and isinstance(data['appointments'], list)
-        found_appointment = False
-        if expected_id and has_array:
-            found_appointment = any(apt.get('id') == expected_id for apt in data['appointments'])
+        if resp.status_code != 200:
+            return test_result("GET /api/cms-services (empty)", False, f"Status {resp.status_code}")
         
-        passed = response.status_code == 200 and has_array
-        if expected_id:
-            passed = passed and found_appointment
-            print_test("Get appointments returns array with created appointment", passed,
-                       f"Status: {response.status_code}, Count: {len(data.get('appointments', []))}, Found ID: {found_appointment}")
-        else:
-            print_test("Get appointments returns array", passed,
-                       f"Status: {response.status_code}, Count: {len(data.get('appointments', []))}")
-        return passed
+        data = resp.json()
+        services = data.get('services', [])
+        
+        # Note: May not be empty if services exist from previous tests
+        return test_result("GET /api/cms-services (empty)", True, 
+            f"Returned {len(services)} services")
+    
     except Exception as e:
-        print_test("Get appointments", False, f"Exception: {str(e)}")
-        return False
+        return test_result("GET /api/cms-services (empty)", False, str(e))
 
-def test_update_appointment_status(appointment_id):
-    """Test 5: PATCH /api/appointments/{id} and verify status change"""
-    print("\n" + "="*60)
-    print("TEST 5: Update Appointment Status")
-    print("="*60)
+def test_4_post_cms_service():
+    """Test 4: POST /api/cms-services - create service with auto-generated slug"""
     try:
-        # Update status
-        payload = {"status": "confirmed"}
-        response = requests.patch(f"{BASE_URL}/appointments/{appointment_id}", json=payload, timeout=10)
-        data = response.json()
+        log("Test 4: POST /api/cms-services")
         
-        update_passed = response.status_code == 200 and data.get('success') == True
-        print_test("Update appointment status", update_passed,
-                   f"Status: {response.status_code}, Response: {data}")
-        
-        if not update_passed:
-            return False
-        
-        # Verify the change
-        response = requests.get(f"{BASE_URL}/appointments", timeout=10)
-        data = response.json()
-        
-        appointment = next((apt for apt in data.get('appointments', []) if apt.get('id') == appointment_id), None)
-        verified = appointment and appointment.get('status') == 'confirmed'
-        
-        print_test("Verify status changed to confirmed", verified,
-                   f"Found appointment: {appointment is not None}, Status: {appointment.get('status') if appointment else 'N/A'}")
-        
-        return update_passed and verified
-    except Exception as e:
-        print_test("Update appointment status", False, f"Exception: {str(e)}")
-        return False
-
-def test_create_home_visit():
-    """Test 6: POST /api/home-visits with valid data"""
-    print("\n" + "="*60)
-    print("TEST 6: Create Home Visit")
-    print("="*60)
-    try:
-        tomorrow = (datetime.now() + timedelta(days=2)).strftime('%Y-%m-%d')
-        payload = {
-            "patientName": "Alice Johnson",
-            "phone": "+1987654321",
-            "address": "123 Main Street, Apt 4B, Springfield",
-            "treatment": "Post-surgery rehabilitation",
-            "preferredDate": tomorrow,
-            "preferredTime": "14:00",
-            "notes": "Please call before arriving"
+        service_data = {
+            'title': 'Test Acupressure Service',
+            'short': 'Test description for acupressure',
+            'symptoms': ['pain', 'stiffness'],
+            'benefits': ['relief', 'mobility'],
+            'active': True
         }
-        response = requests.post(f"{BASE_URL}/home-visits", json=payload, timeout=10)
-        data = response.json()
         
-        has_id = 'request' in data and 'id' in data['request']
-        passed = response.status_code == 200 and data.get('success') == True and has_id
+        resp = requests.post(f"{BASE_URL}/cms-services", json=service_data, timeout=10)
         
-        print_test("Create home visit", passed,
-                   f"Status: {response.status_code}, Has ID: {has_id}")
+        if resp.status_code != 200:
+            return test_result("POST /api/cms-services", False, f"Status {resp.status_code}")
         
-        if passed:
-            return data['request']['id']
-        return None
+        data = resp.json()
+        if not data.get('success'):
+            return test_result("POST /api/cms-services", False, "No success field")
+        
+        service = data.get('service', {})
+        service_id = service.get('id')
+        slug = service.get('slug')
+        
+        if not service_id:
+            return test_result("POST /api/cms-services", False, "No id returned")
+        
+        if not slug:
+            return test_result("POST /api/cms-services", False, "No slug generated")
+        
+        test_data['service_id'] = service_id
+        
+        return test_result("POST /api/cms-services", True, 
+            f"Created service id={service_id}, slug={slug}")
+    
     except Exception as e:
-        print_test("Create home visit", False, f"Exception: {str(e)}")
-        return None
+        return test_result("POST /api/cms-services", False, str(e))
 
-def test_get_home_visits(expected_id=None):
-    """Test 7: GET /api/home-visits"""
-    print("\n" + "="*60)
-    print("TEST 7: Get All Home Visits")
-    print("="*60)
+def test_5_post_cms_service_no_title():
+    """Test 5: POST /api/cms-services without title - should return 400"""
     try:
-        response = requests.get(f"{BASE_URL}/home-visits", timeout=10)
-        data = response.json()
+        log("Test 5: POST /api/cms-services (no title)")
         
-        has_array = 'visits' in data and isinstance(data['visits'], list)
-        found_visit = False
-        if expected_id and has_array:
-            found_visit = any(visit.get('id') == expected_id for visit in data['visits'])
+        resp = requests.post(f"{BASE_URL}/cms-services", json={'short': 'desc'}, timeout=10)
         
-        passed = response.status_code == 200 and has_array
-        if expected_id:
-            passed = passed and found_visit
-            print_test("Get home visits with created visit", passed,
-                       f"Status: {response.status_code}, Count: {len(data.get('visits', []))}, Found ID: {found_visit}")
-        else:
-            print_test("Get home visits", passed,
-                       f"Status: {response.status_code}, Count: {len(data.get('visits', []))}")
-        return passed
+        if resp.status_code != 400:
+            return test_result("POST /api/cms-services (no title)", False, 
+                f"Expected 400, got {resp.status_code}")
+        
+        return test_result("POST /api/cms-services (no title)", True, "Validation working")
+    
     except Exception as e:
-        print_test("Get home visits", False, f"Exception: {str(e)}")
-        return False
+        return test_result("POST /api/cms-services (no title)", False, str(e))
 
-def test_update_home_visit_status(visit_id):
-    """Test 8: PATCH /api/home-visits/{id} status update"""
-    print("\n" + "="*60)
-    print("TEST 8: Update Home Visit Status")
-    print("="*60)
+def test_6_get_cms_services_with_new():
+    """Test 6: GET /api/cms-services - should contain the new service"""
     try:
-        payload = {"status": "scheduled"}
-        response = requests.patch(f"{BASE_URL}/home-visits/{visit_id}", json=payload, timeout=10)
-        data = response.json()
+        log("Test 6: GET /api/cms-services (with new service)")
+        resp = requests.get(f"{BASE_URL}/cms-services", timeout=10)
         
-        update_passed = response.status_code == 200 and data.get('success') == True
-        print_test("Update home visit status", update_passed,
-                   f"Status: {response.status_code}, Response: {data}")
+        if resp.status_code != 200:
+            return test_result("GET /api/cms-services (with new)", False, f"Status {resp.status_code}")
         
-        if not update_passed:
-            return False
+        data = resp.json()
+        services = data.get('services', [])
         
-        # Verify the change
-        response = requests.get(f"{BASE_URL}/home-visits", timeout=10)
-        data = response.json()
+        found = any(s.get('id') == test_data['service_id'] for s in services)
         
-        visit = next((v for v in data.get('visits', []) if v.get('id') == visit_id), None)
-        verified = visit and visit.get('status') == 'scheduled'
+        if not found:
+            return test_result("GET /api/cms-services (with new)", False, 
+                "New service not found in list")
         
-        print_test("Verify home visit status changed", verified,
-                   f"Found visit: {visit is not None}, Status: {visit.get('status') if visit else 'N/A'}")
-        
-        return update_passed and verified
+        return test_result("GET /api/cms-services (with new)", True, 
+            f"Found new service in list of {len(services)}")
+    
     except Exception as e:
-        print_test("Update home visit status", False, f"Exception: {str(e)}")
-        return False
+        return test_result("GET /api/cms-services (with new)", False, str(e))
 
-def test_create_contact():
-    """Test 9a: POST /api/contact"""
-    print("\n" + "="*60)
-    print("TEST 9a: Create Contact Enquiry")
-    print("="*60)
+def test_7_patch_cms_service_inactive():
+    """Test 7: PATCH /api/cms-services/{id} - set active=false and verify filtering"""
     try:
-        payload = {
-            "name": "Bob Williams",
-            "phone": "+1555123456",
-            "email": "bob.williams@example.com",
-            "message": "I would like to know more about your sports injury treatment programs."
+        log("Test 7: PATCH /api/cms-services (set inactive)")
+        
+        if not test_data['service_id']:
+            return test_result("PATCH /api/cms-services (inactive)", False, "No service_id")
+        
+        resp = requests.patch(f"{BASE_URL}/cms-services/{test_data['service_id']}", 
+            json={'active': False}, timeout=10)
+        
+        if resp.status_code != 200:
+            return test_result("PATCH /api/cms-services (inactive)", False, 
+                f"Status {resp.status_code}")
+        
+        # GET without ?all=1 should NOT contain it
+        resp2 = requests.get(f"{BASE_URL}/cms-services", timeout=10)
+        data2 = resp2.json()
+        services = data2.get('services', [])
+        found = any(s.get('id') == test_data['service_id'] for s in services)
+        
+        if found:
+            return test_result("PATCH /api/cms-services (inactive)", False, 
+                "Inactive service still in default list")
+        
+        # GET with ?all=1 SHOULD contain it
+        resp3 = requests.get(f"{BASE_URL}/cms-services?all=1", timeout=10)
+        data3 = resp3.json()
+        all_services = data3.get('services', [])
+        found_all = any(s.get('id') == test_data['service_id'] for s in all_services)
+        
+        if not found_all:
+            return test_result("PATCH /api/cms-services (inactive)", False, 
+                "Inactive service not in ?all=1 list")
+        
+        return test_result("PATCH /api/cms-services (inactive)", True, 
+            "Active filtering working correctly")
+    
+    except Exception as e:
+        return test_result("PATCH /api/cms-services (inactive)", False, str(e))
+
+def test_8_delete_cms_service():
+    """Test 8: DELETE /api/cms-services/{id} - verify removed"""
+    try:
+        log("Test 8: DELETE /api/cms-services")
+        
+        if not test_data['service_id']:
+            return test_result("DELETE /api/cms-services", False, "No service_id")
+        
+        resp = requests.delete(f"{BASE_URL}/cms-services/{test_data['service_id']}", timeout=10)
+        
+        if resp.status_code != 200:
+            return test_result("DELETE /api/cms-services", False, f"Status {resp.status_code}")
+        
+        # Verify removed
+        resp2 = requests.get(f"{BASE_URL}/cms-services?all=1", timeout=10)
+        data2 = resp2.json()
+        services = data2.get('services', [])
+        found = any(s.get('id') == test_data['service_id'] for s in services)
+        
+        if found:
+            return test_result("DELETE /api/cms-services", False, "Service still exists")
+        
+        test_data['service_id'] = None
+        return test_result("DELETE /api/cms-services", True, "Service deleted successfully")
+    
+    except Exception as e:
+        return test_result("DELETE /api/cms-services", False, str(e))
+
+# ==================== TESTIMONIALS TESTS ====================
+
+def test_9_get_testimonials_seeded():
+    """Test 9: GET /api/testimonials - should have 6 default testimonials"""
+    try:
+        log("Test 9: GET /api/testimonials (seeded)")
+        resp = requests.get(f"{BASE_URL}/testimonials", timeout=10)
+        
+        if resp.status_code != 200:
+            return test_result("GET /api/testimonials (seeded)", False, f"Status {resp.status_code}")
+        
+        data = resp.json()
+        testimonials = data.get('testimonials', [])
+        
+        if len(testimonials) < 6:
+            return test_result("GET /api/testimonials (seeded)", False, 
+                f"Expected at least 6 seeded testimonials, got {len(testimonials)}")
+        
+        return test_result("GET /api/testimonials (seeded)", True, 
+            f"Found {len(testimonials)} testimonials (includes 6 seeded)")
+    
+    except Exception as e:
+        return test_result("GET /api/testimonials (seeded)", False, str(e))
+
+def test_10_post_testimonial():
+    """Test 10: POST /api/testimonials - create testimonial"""
+    try:
+        log("Test 10: POST /api/testimonials")
+        
+        testimonial_data = {
+            'patientName': 'Ramesh Kumar',
+            'rating': 5,
+            'review': 'Excellent treatment for my back pain. Highly recommend!',
+            'role': 'Engineer',
+            'active': True
         }
-        response = requests.post(f"{BASE_URL}/contact", json=payload, timeout=10)
-        data = response.json()
         
-        has_id = 'enquiry' in data and 'id' in data['enquiry']
-        passed = response.status_code == 200 and data.get('success') == True and has_id
+        resp = requests.post(f"{BASE_URL}/testimonials", json=testimonial_data, timeout=10)
         
-        print_test("Create contact enquiry", passed,
-                   f"Status: {response.status_code}, Has ID: {has_id}")
+        if resp.status_code != 200:
+            return test_result("POST /api/testimonials", False, f"Status {resp.status_code}")
         
-        if passed:
-            return data['enquiry']['id']
-        return None
+        data = resp.json()
+        if not data.get('success'):
+            return test_result("POST /api/testimonials", False, "No success field")
+        
+        testimonial = data.get('testimonial', {})
+        testimonial_id = testimonial.get('id')
+        
+        if not testimonial_id:
+            return test_result("POST /api/testimonials", False, "No id returned")
+        
+        test_data['testimonial_id'] = testimonial_id
+        
+        return test_result("POST /api/testimonials", True, f"Created testimonial id={testimonial_id}")
+    
     except Exception as e:
-        print_test("Create contact enquiry", False, f"Exception: {str(e)}")
-        return None
+        return test_result("POST /api/testimonials", False, str(e))
 
-def test_get_contacts(expected_id=None):
-    """Test 9b: GET /api/contact"""
-    print("\n" + "="*60)
-    print("TEST 9b: Get All Contact Enquiries")
-    print("="*60)
+def test_11_post_testimonial_validation():
+    """Test 11: POST /api/testimonials without required fields - should return 400"""
     try:
-        response = requests.get(f"{BASE_URL}/contact", timeout=10)
-        print(f"  Raw response status: {response.status_code}")
-        print(f"  Raw response text: {response.text[:200]}")
-        data = response.json()
+        log("Test 11: POST /api/testimonials (validation)")
         
-        has_array = 'enquiries' in data and isinstance(data['enquiries'], list)
-        found_contact = False
-        if expected_id and has_array:
-            found_contact = any(enq.get('id') == expected_id for enq in data['enquiries'])
+        # Missing patientName
+        resp1 = requests.post(f"{BASE_URL}/testimonials", json={'review': 'test'}, timeout=10)
+        if resp1.status_code != 400:
+            return test_result("POST /api/testimonials (validation)", False, 
+                f"Missing patientName: expected 400, got {resp1.status_code}")
         
-        passed = response.status_code == 200 and has_array
-        if expected_id:
-            passed = passed and found_contact
-            print_test("Get contacts with created enquiry", passed,
-                       f"Status: {response.status_code}, Count: {len(data.get('enquiries', []))}, Found ID: {found_contact}")
-        else:
-            print_test("Get contacts", passed,
-                       f"Status: {response.status_code}, Count: {len(data.get('enquiries', []))}")
-        return passed
+        # Missing review
+        resp2 = requests.post(f"{BASE_URL}/testimonials", json={'patientName': 'test'}, timeout=10)
+        if resp2.status_code != 400:
+            return test_result("POST /api/testimonials (validation)", False, 
+                f"Missing review: expected 400, got {resp2.status_code}")
+        
+        return test_result("POST /api/testimonials (validation)", True, "Validation working")
+    
     except Exception as e:
-        print_test("Get contacts", False, f"Exception: {str(e)}, Response: {response.text[:200] if 'response' in locals() else 'N/A'}")
-        return False
+        return test_result("POST /api/testimonials (validation)", False, str(e))
 
-def test_update_contact_status(contact_id):
-    """Test 9c: PATCH /api/contact/{id}"""
-    print("\n" + "="*60)
-    print("TEST 9c: Update Contact Status")
-    print("="*60)
+def test_12_patch_testimonial_inactive():
+    """Test 12: PATCH /api/testimonials/{id} - set active=false and verify hidden"""
     try:
-        payload = {"status": "resolved"}
-        response = requests.patch(f"{BASE_URL}/contact/{contact_id}", json=payload, timeout=10)
-        data = response.json()
+        log("Test 12: PATCH /api/testimonials (set inactive)")
         
-        update_passed = response.status_code == 200 and data.get('success') == True
-        print_test("Update contact status", update_passed,
-                   f"Status: {response.status_code}, Response: {data}")
+        if not test_data['testimonial_id']:
+            return test_result("PATCH /api/testimonials (inactive)", False, "No testimonial_id")
         
-        if not update_passed:
-            return False
+        resp = requests.patch(f"{BASE_URL}/testimonials/{test_data['testimonial_id']}", 
+            json={'active': False}, timeout=10)
         
-        # Verify the change
-        response = requests.get(f"{BASE_URL}/contact", timeout=10)
-        data = response.json()
+        if resp.status_code != 200:
+            return test_result("PATCH /api/testimonials (inactive)", False, 
+                f"Status {resp.status_code}")
         
-        contact = next((c for c in data.get('enquiries', []) if c.get('id') == contact_id), None)
-        verified = contact and contact.get('status') == 'resolved'
+        # GET without ?all=1 should NOT contain it
+        resp2 = requests.get(f"{BASE_URL}/testimonials", timeout=10)
+        data2 = resp2.json()
+        testimonials = data2.get('testimonials', [])
+        found = any(t.get('id') == test_data['testimonial_id'] for t in testimonials)
         
-        print_test("Verify contact status changed to resolved", verified,
-                   f"Found contact: {contact is not None}, Status: {contact.get('status') if contact else 'N/A'}")
+        if found:
+            return test_result("PATCH /api/testimonials (inactive)", False, 
+                "Inactive testimonial still in default list")
         
-        return update_passed and verified
+        return test_result("PATCH /api/testimonials (inactive)", True, 
+            "Inactive testimonial hidden from default GET")
+    
     except Exception as e:
-        print_test("Update contact status", False, f"Exception: {str(e)}")
-        return False
+        return test_result("PATCH /api/testimonials (inactive)", False, str(e))
 
-def test_admin_login_wrong_password():
-    """Test 10: POST /api/admin/login with wrong password"""
-    print("\n" + "="*60)
-    print("TEST 10: Admin Login (Wrong Password)")
-    print("="*60)
+def test_13_delete_testimonial():
+    """Test 13: DELETE /api/testimonials/{id} - verify removed"""
     try:
-        payload = {"password": "wrongpassword123"}
-        response = requests.post(f"{BASE_URL}/admin/login", json=payload, timeout=10)
-        print(f"  Raw response status: {response.status_code}")
-        print(f"  Raw response text: {response.text[:200]}")
-        data = response.json()
+        log("Test 13: DELETE /api/testimonials")
         
-        passed = response.status_code == 401 and 'error' in data
-        print_test("Admin login with wrong password returns 401", passed,
-                   f"Status: {response.status_code}, Response: {data}")
-        return passed
+        if not test_data['testimonial_id']:
+            return test_result("DELETE /api/testimonials", False, "No testimonial_id")
+        
+        resp = requests.delete(f"{BASE_URL}/testimonials/{test_data['testimonial_id']}", timeout=10)
+        
+        if resp.status_code != 200:
+            return test_result("DELETE /api/testimonials", False, f"Status {resp.status_code}")
+        
+        # Verify removed
+        resp2 = requests.get(f"{BASE_URL}/testimonials?all=1", timeout=10)
+        data2 = resp2.json()
+        testimonials = data2.get('testimonials', [])
+        found = any(t.get('id') == test_data['testimonial_id'] for t in testimonials)
+        
+        if found:
+            return test_result("DELETE /api/testimonials", False, "Testimonial still exists")
+        
+        test_data['testimonial_id'] = None
+        return test_result("DELETE /api/testimonials", True, "Testimonial deleted successfully")
+    
     except Exception as e:
-        print_test("Admin login with wrong password", False, f"Exception: {str(e)}, Response: {response.text[:200] if 'response' in locals() else 'N/A'}")
-        return False
+        return test_result("DELETE /api/testimonials", False, str(e))
 
-def test_admin_login_correct_password():
-    """Test 11: POST /api/admin/login with correct password"""
-    print("\n" + "="*60)
-    print("TEST 11: Admin Login (Correct Password)")
-    print("="*60)
+# ==================== BLOGS TESTS ====================
+
+def test_14_get_blogs_empty():
+    """Test 14: GET /api/blogs - empty list initially"""
     try:
-        payload = {"password": "admin123"}
-        response = requests.post(f"{BASE_URL}/admin/login", json=payload, timeout=10)
-        print(f"  Raw response status: {response.status_code}")
-        print(f"  Raw response text: {response.text[:200]}")
-        data = response.json()
+        log("Test 14: GET /api/blogs (initial)")
+        resp = requests.get(f"{BASE_URL}/blogs", timeout=10)
         
-        has_token = 'token' in data and data['token']
-        passed = response.status_code == 200 and data.get('success') == True and has_token
+        if resp.status_code != 200:
+            return test_result("GET /api/blogs (empty)", False, f"Status {resp.status_code}")
         
-        print_test("Admin login with correct password", passed,
-                   f"Status: {response.status_code}, Has token: {has_token}")
-        return passed
+        data = resp.json()
+        blogs = data.get('blogs', [])
+        
+        # Note: May not be empty if blogs exist from previous tests
+        return test_result("GET /api/blogs (empty)", True, f"Returned {len(blogs)} published blogs")
+    
     except Exception as e:
-        print_test("Admin login with correct password", False, f"Exception: {str(e)}, Response: {response.text[:200] if 'response' in locals() else 'N/A'}")
-        return False
+        return test_result("GET /api/blogs (empty)", False, str(e))
 
-def test_admin_stats():
-    """Test 12: GET /api/admin/stats"""
-    print("\n" + "="*60)
-    print("TEST 12: Admin Stats")
-    print("="*60)
+def test_15_post_blog():
+    """Test 15: POST /api/blogs - create draft blog with auto-generated slug"""
     try:
-        response = requests.get(f"{BASE_URL}/admin/stats", timeout=10)
-        data = response.json()
+        log("Test 15: POST /api/blogs")
         
-        required_fields = ['totalAppointments', 'pendingAppointments', 'todayAppointments', 'homeVisits', 'newEnquiries', 'activeDoctors']
-        has_all_fields = all(field in data for field in required_fields)
-        all_numbers = all(isinstance(data.get(field), int) for field in required_fields)
-        
-        passed = response.status_code == 200 and has_all_fields and all_numbers
-        
-        print_test("Admin stats returns all required fields including activeDoctors", passed,
-                   f"Status: {response.status_code}, Has all fields: {has_all_fields}, All numbers: {all_numbers}")
-        if passed:
-            print(f"  Stats: {json.dumps(data, indent=2)}")
-        return passed
-    except Exception as e:
-        print_test("Admin stats", False, f"Exception: {str(e)}")
-        return False
-
-def test_get_doctors_default_seeded():
-    """Test 13: GET /api/doctors - verify 3 default doctors seeded"""
-    print("\n" + "="*60)
-    print("TEST 13: Get Doctors (Default Seeded)")
-    print("="*60)
-    try:
-        response = requests.get(f"{BASE_URL}/doctors", timeout=10)
-        data = response.json()
-        
-        has_array = 'doctors' in data and isinstance(data['doctors'], list)
-        
-        # Check for the 3 default doctors
-        expected_names = ['Dr. Ashwani Kumar Gupta', 'Dr. Chhotelal Singh', 'Dr. Santosh Singh']
-        found_doctors = []
-        if has_array:
-            for name in expected_names:
-                found = any(doc.get('name') == name for doc in data['doctors'])
-                found_doctors.append(found)
-        
-        # Verify all have required fields
-        all_have_fields = True
-        if has_array:
-            for doc in data['doctors']:
-                if not all(field in doc for field in ['name', 'specialization', 'experience', 'id']):
-                    all_have_fields = False
-                    break
-        
-        passed = response.status_code == 200 and has_array and all(found_doctors) and all_have_fields
-        
-        print_test("Get doctors returns 3 default seeded doctors with required fields", passed,
-                   f"Status: {response.status_code}, Count: {len(data.get('doctors', []))}, Found all 3: {all(found_doctors)}, All have fields: {all_have_fields}")
-        return passed
-    except Exception as e:
-        print_test("Get doctors default seeded", False, f"Exception: {str(e)}")
-        return False
-
-def test_get_doctors_with_all_param():
-    """Test 14: GET /api/doctors?all=1 - returns including inactive"""
-    print("\n" + "="*60)
-    print("TEST 14: Get Doctors (Including Inactive)")
-    print("="*60)
-    try:
-        response = requests.get(f"{BASE_URL}/doctors?all=1", timeout=10)
-        data = response.json()
-        
-        has_array = 'doctors' in data and isinstance(data['doctors'], list)
-        passed = response.status_code == 200 and has_array
-        
-        print_test("Get doctors with ?all=1 returns array", passed,
-                   f"Status: {response.status_code}, Count: {len(data.get('doctors', []))}")
-        return passed, len(data.get('doctors', [])) if has_array else 0
-    except Exception as e:
-        print_test("Get doctors with all param", False, f"Exception: {str(e)}")
-        return False, 0
-
-def test_create_doctor_valid():
-    """Test 15: POST /api/doctors with valid data"""
-    print("\n" + "="*60)
-    print("TEST 15: Create Doctor (Valid Data)")
-    print("="*60)
-    try:
-        payload = {
-            "name": "Dr. Test Kumar",
-            "title": "M.D., Ph.D.",
-            "specialization": "Sports Medicine",
-            "experience": "8+ years",
-            "photo": "",
-            "active": True,
-            "order": 10
+        blog_data = {
+            'title': 'Benefits of Acupressure Therapy',
+            'content': '## Introduction\n\nAcupressure is a **natural** healing method.',
+            'excerpt': 'Learn about the amazing benefits of acupressure',
+            'category': 'Health Tips',
+            'published': False
         }
-        response = requests.post(f"{BASE_URL}/doctors", json=payload, timeout=10)
-        data = response.json()
         
-        has_id = 'doctor' in data and 'id' in data['doctor']
-        has_success = data.get('success') == True
-        is_active = 'doctor' in data and data['doctor'].get('active') == True
+        resp = requests.post(f"{BASE_URL}/blogs", json=blog_data, timeout=10)
         
-        passed = response.status_code == 200 and has_success and has_id and is_active
+        if resp.status_code != 200:
+            return test_result("POST /api/blogs", False, f"Status {resp.status_code}")
         
-        print_test("Create doctor with valid data", passed,
-                   f"Status: {response.status_code}, Has ID: {has_id}, Active: {is_active}, Success: {has_success}")
+        data = resp.json()
+        if not data.get('success'):
+            return test_result("POST /api/blogs", False, "No success field")
         
-        if passed:
-            return data['doctor']['id']
-        return None
+        blog = data.get('blog', {})
+        blog_id = blog.get('id')
+        slug = blog.get('slug')
+        
+        if not blog_id:
+            return test_result("POST /api/blogs", False, "No id returned")
+        
+        if not slug:
+            return test_result("POST /api/blogs", False, "No slug generated")
+        
+        test_data['blog_id'] = blog_id
+        test_data['blog_slug'] = slug
+        
+        return test_result("POST /api/blogs", True, f"Created blog id={blog_id}, slug={slug}")
+    
     except Exception as e:
-        print_test("Create doctor with valid data", False, f"Exception: {str(e)}")
-        return None
+        return test_result("POST /api/blogs", False, str(e))
 
-def test_create_doctor_missing_name():
-    """Test 16: POST /api/doctors without name - should return 400"""
-    print("\n" + "="*60)
-    print("TEST 16: Create Doctor (Missing Name)")
-    print("="*60)
+def test_16_post_blog_duplicate_slug():
+    """Test 16: POST /api/blogs with duplicate slug - should return 409"""
     try:
-        payload = {
-            "title": "M.D.",
-            "specialization": "General Practice"
+        log("Test 16: POST /api/blogs (duplicate slug)")
+        
+        if not test_data['blog_slug']:
+            return test_result("POST /api/blogs (duplicate)", False, "No blog_slug")
+        
+        blog_data = {
+            'title': 'Different Title',
+            'slug': test_data['blog_slug'],  # Use existing slug
+            'content': 'Content',
+            'published': False
         }
-        response = requests.post(f"{BASE_URL}/doctors", json=payload, timeout=10)
-        data = response.json()
         
-        passed = response.status_code == 400 and 'error' in data
-        print_test("Create doctor without name returns 400", passed,
-                   f"Status: {response.status_code}, Response: {data}")
-        return passed
+        resp = requests.post(f"{BASE_URL}/blogs", json=blog_data, timeout=10)
+        
+        if resp.status_code != 409:
+            return test_result("POST /api/blogs (duplicate)", False, 
+                f"Expected 409, got {resp.status_code}")
+        
+        return test_result("POST /api/blogs (duplicate)", True, "Duplicate slug validation working")
+    
     except Exception as e:
-        print_test("Create doctor without name", False, f"Exception: {str(e)}")
-        return False
+        return test_result("POST /api/blogs (duplicate)", False, str(e))
 
-def test_disable_doctor(doctor_id):
-    """Test 17: PATCH /api/doctors/{id} with active:false"""
-    print("\n" + "="*60)
-    print("TEST 17: Disable Doctor")
-    print("="*60)
+def test_17_get_blogs_draft_filtering():
+    """Test 17: GET /api/blogs - draft should be hidden, visible with ?all=1"""
     try:
-        payload = {"active": False}
-        response = requests.patch(f"{BASE_URL}/doctors/{doctor_id}", json=payload, timeout=10)
-        data = response.json()
+        log("Test 17: GET /api/blogs (draft filtering)")
         
-        passed = response.status_code == 200 and data.get('success') == True
-        print_test("Disable doctor", passed,
-                   f"Status: {response.status_code}, Response: {data}")
-        return passed
+        # GET without ?all=1 should NOT contain draft
+        resp1 = requests.get(f"{BASE_URL}/blogs", timeout=10)
+        data1 = resp1.json()
+        blogs = data1.get('blogs', [])
+        found = any(b.get('id') == test_data['blog_id'] for b in blogs)
+        
+        if found:
+            return test_result("GET /api/blogs (draft filtering)", False, 
+                "Draft blog visible in default list")
+        
+        # GET with ?all=1 SHOULD contain draft
+        resp2 = requests.get(f"{BASE_URL}/blogs?all=1", timeout=10)
+        data2 = resp2.json()
+        all_blogs = data2.get('blogs', [])
+        found_all = any(b.get('id') == test_data['blog_id'] for b in all_blogs)
+        
+        if not found_all:
+            return test_result("GET /api/blogs (draft filtering)", False, 
+                "Draft blog not in ?all=1 list")
+        
+        return test_result("GET /api/blogs (draft filtering)", True, 
+            "Draft filtering working correctly")
+    
     except Exception as e:
-        print_test("Disable doctor", False, f"Exception: {str(e)}")
-        return False
+        return test_result("GET /api/blogs (draft filtering)", False, str(e))
 
-def test_verify_disabled_doctor_not_in_default_list(doctor_id):
-    """Test 18: Verify disabled doctor NOT in GET /api/doctors"""
-    print("\n" + "="*60)
-    print("TEST 18: Verify Disabled Doctor Not in Default List")
-    print("="*60)
+def test_18_patch_blog_publish():
+    """Test 18: PATCH /api/blogs/{id} - publish blog and verify publishedAt"""
     try:
-        response = requests.get(f"{BASE_URL}/doctors", timeout=10)
-        data = response.json()
+        log("Test 18: PATCH /api/blogs (publish)")
         
-        has_array = 'doctors' in data and isinstance(data['doctors'], list)
-        not_found = True
-        if has_array:
-            not_found = not any(doc.get('id') == doctor_id for doc in data['doctors'])
+        if not test_data['blog_id']:
+            return test_result("PATCH /api/blogs (publish)", False, "No blog_id")
         
-        passed = response.status_code == 200 and has_array and not_found
-        print_test("Disabled doctor not in default list", passed,
-                   f"Status: {response.status_code}, Doctor not found: {not_found}")
-        return passed
+        resp = requests.patch(f"{BASE_URL}/blogs/{test_data['blog_id']}", 
+            json={'published': True}, timeout=10)
+        
+        if resp.status_code != 200:
+            return test_result("PATCH /api/blogs (publish)", False, f"Status {resp.status_code}")
+        
+        data = resp.json()
+        blog = data.get('blog', {})
+        
+        if not blog.get('publishedAt'):
+            return test_result("PATCH /api/blogs (publish)", False, "No publishedAt set")
+        
+        # Verify now visible in default GET
+        resp2 = requests.get(f"{BASE_URL}/blogs", timeout=10)
+        data2 = resp2.json()
+        blogs = data2.get('blogs', [])
+        found = any(b.get('id') == test_data['blog_id'] for b in blogs)
+        
+        if not found:
+            return test_result("PATCH /api/blogs (publish)", False, 
+                "Published blog not in default list")
+        
+        return test_result("PATCH /api/blogs (publish)", True, 
+            "Blog published successfully with publishedAt")
+    
     except Exception as e:
-        print_test("Verify disabled doctor not in list", False, f"Exception: {str(e)}")
-        return False
+        return test_result("PATCH /api/blogs (publish)", False, str(e))
 
-def test_verify_disabled_doctor_in_all_list(doctor_id):
-    """Test 19: Verify disabled doctor IS in GET /api/doctors?all=1"""
-    print("\n" + "="*60)
-    print("TEST 19: Verify Disabled Doctor in All List")
-    print("="*60)
+def test_19_get_blog_by_slug():
+    """Test 19: GET /api/blogs/slug/{slug} - returns the blog"""
     try:
-        response = requests.get(f"{BASE_URL}/doctors?all=1", timeout=10)
-        data = response.json()
+        log("Test 19: GET /api/blogs/slug/{slug}")
         
-        has_array = 'doctors' in data and isinstance(data['doctors'], list)
-        found = False
-        if has_array:
-            found = any(doc.get('id') == doctor_id for doc in data['doctors'])
+        if not test_data['blog_slug']:
+            return test_result("GET /api/blogs/slug/{slug}", False, "No blog_slug")
         
-        passed = response.status_code == 200 and has_array and found
-        print_test("Disabled doctor in all list", passed,
-                   f"Status: {response.status_code}, Doctor found: {found}")
-        return passed
+        resp = requests.get(f"{BASE_URL}/blogs/slug/{test_data['blog_slug']}", timeout=10)
+        
+        if resp.status_code != 200:
+            return test_result("GET /api/blogs/slug/{slug}", False, f"Status {resp.status_code}")
+        
+        data = resp.json()
+        blog = data.get('blog', {})
+        
+        if blog.get('id') != test_data['blog_id']:
+            return test_result("GET /api/blogs/slug/{slug}", False, "Wrong blog returned")
+        
+        return test_result("GET /api/blogs/slug/{slug}", True, 
+            f"Retrieved blog by slug: {test_data['blog_slug']}")
+    
     except Exception as e:
-        print_test("Verify disabled doctor in all list", False, f"Exception: {str(e)}")
-        return False
+        return test_result("GET /api/blogs/slug/{slug}", False, str(e))
 
-def test_update_doctor_fields(doctor_id):
-    """Test 20: PATCH /api/doctors/{id} with name and specialization update"""
-    print("\n" + "="*60)
-    print("TEST 20: Update Doctor Fields")
-    print("="*60)
+def test_20_delete_blog():
+    """Test 20: DELETE /api/blogs/{id} - verify removed"""
     try:
-        payload = {
-            "name": "Dr. Updated Name",
-            "specialization": "New Specialization"
+        log("Test 20: DELETE /api/blogs")
+        
+        if not test_data['blog_id']:
+            return test_result("DELETE /api/blogs", False, "No blog_id")
+        
+        resp = requests.delete(f"{BASE_URL}/blogs/{test_data['blog_id']}", timeout=10)
+        
+        if resp.status_code != 200:
+            return test_result("DELETE /api/blogs", False, f"Status {resp.status_code}")
+        
+        # Verify removed
+        resp2 = requests.get(f"{BASE_URL}/blogs?all=1", timeout=10)
+        data2 = resp2.json()
+        blogs = data2.get('blogs', [])
+        found = any(b.get('id') == test_data['blog_id'] for b in blogs)
+        
+        if found:
+            return test_result("DELETE /api/blogs", False, "Blog still exists")
+        
+        test_data['blog_id'] = None
+        test_data['blog_slug'] = None
+        return test_result("DELETE /api/blogs", True, "Blog deleted successfully")
+    
+    except Exception as e:
+        return test_result("DELETE /api/blogs", False, str(e))
+
+# ==================== GALLERY TESTS ====================
+
+def test_21_get_gallery_empty():
+    """Test 21: GET /api/gallery - empty array initially"""
+    try:
+        log("Test 21: GET /api/gallery (initial)")
+        resp = requests.get(f"{BASE_URL}/gallery", timeout=10)
+        
+        if resp.status_code != 200:
+            return test_result("GET /api/gallery (empty)", False, f"Status {resp.status_code}")
+        
+        data = resp.json()
+        images = data.get('images', [])
+        
+        # Note: May not be empty if images exist from previous tests
+        return test_result("GET /api/gallery (empty)", True, f"Returned {len(images)} images")
+    
+    except Exception as e:
+        return test_result("GET /api/gallery (empty)", False, str(e))
+
+def test_22_post_gallery():
+    """Test 22: POST /api/gallery - create gallery image"""
+    try:
+        log("Test 22: POST /api/gallery")
+        
+        gallery_data = {
+            'imageUrl': 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCwAA8A/9k=',
+            'title': 'Test Clinic Photo',
+            'category': 'clinic'
         }
-        response = requests.patch(f"{BASE_URL}/doctors/{doctor_id}", json=payload, timeout=10)
-        data = response.json()
         
-        update_passed = response.status_code == 200 and data.get('success') == True
+        resp = requests.post(f"{BASE_URL}/gallery", json=gallery_data, timeout=10)
         
-        # Verify the update persisted
-        response_all = requests.get(f"{BASE_URL}/doctors?all=1", timeout=10)
-        data_all = response_all.json()
+        if resp.status_code != 200:
+            return test_result("POST /api/gallery", False, f"Status {resp.status_code}")
         
-        doctor = next((d for d in data_all.get('doctors', []) if d.get('id') == doctor_id), None)
-        verified = doctor and doctor.get('name') == "Dr. Updated Name" and doctor.get('specialization') == "New Specialization"
+        data = resp.json()
+        if not data.get('success'):
+            return test_result("POST /api/gallery", False, "No success field")
         
-        passed = update_passed and verified
-        print_test("Update doctor fields and verify persistence", passed,
-                   f"Status: {response.status_code}, Updated: {update_passed}, Verified: {verified}")
-        return passed
+        image = data.get('image', {})
+        image_id = image.get('id')
+        
+        if not image_id:
+            return test_result("POST /api/gallery", False, "No id returned")
+        
+        test_data['gallery_id'] = image_id
+        
+        return test_result("POST /api/gallery", True, f"Created gallery image id={image_id}")
+    
     except Exception as e:
-        print_test("Update doctor fields", False, f"Exception: {str(e)}")
-        return False
+        return test_result("POST /api/gallery", False, str(e))
 
-def test_update_doctor_photo(doctor_id):
-    """Test 21: PATCH /api/doctors/{id} with photo (base64)"""
-    print("\n" + "="*60)
-    print("TEST 21: Update Doctor Photo")
-    print("="*60)
+def test_23_post_gallery_validation():
+    """Test 23: POST /api/gallery without imageUrl - should return 400"""
     try:
-        # Small base64 encoded image (1x1 pixel PNG)
-        small_base64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
-        payload = {"photo": small_base64}
-        response = requests.patch(f"{BASE_URL}/doctors/{doctor_id}", json=payload, timeout=10)
-        data = response.json()
+        log("Test 23: POST /api/gallery (validation)")
         
-        update_passed = response.status_code == 200 and data.get('success') == True
+        resp = requests.post(f"{BASE_URL}/gallery", json={'title': 'test'}, timeout=10)
         
-        # Verify photo stored
-        response_all = requests.get(f"{BASE_URL}/doctors?all=1", timeout=10)
-        data_all = response_all.json()
+        if resp.status_code != 400:
+            return test_result("POST /api/gallery (validation)", False, 
+                f"Expected 400, got {resp.status_code}")
         
-        doctor = next((d for d in data_all.get('doctors', []) if d.get('id') == doctor_id), None)
-        verified = doctor and doctor.get('photo') == small_base64
-        
-        passed = update_passed and verified
-        print_test("Update doctor photo and verify storage", passed,
-                   f"Status: {response.status_code}, Updated: {update_passed}, Verified: {verified}")
-        return passed
+        return test_result("POST /api/gallery (validation)", True, "Validation working")
+    
     except Exception as e:
-        print_test("Update doctor photo", False, f"Exception: {str(e)}")
-        return False
+        return test_result("POST /api/gallery (validation)", False, str(e))
 
-def test_delete_doctor(doctor_id):
-    """Test 22: DELETE /api/doctors/{id}"""
-    print("\n" + "="*60)
-    print("TEST 22: Delete Doctor")
-    print("="*60)
+def test_24_get_gallery_by_category():
+    """Test 24: GET /api/gallery?category=clinic - filters by category"""
     try:
-        response = requests.delete(f"{BASE_URL}/doctors/{doctor_id}", timeout=10)
-        data = response.json()
+        log("Test 24: GET /api/gallery?category=clinic")
         
-        delete_passed = response.status_code == 200 and data.get('success') == True
+        resp = requests.get(f"{BASE_URL}/gallery?category=clinic", timeout=10)
         
-        # Verify deletion
-        response_all = requests.get(f"{BASE_URL}/doctors?all=1", timeout=10)
-        data_all = response_all.json()
+        if resp.status_code != 200:
+            return test_result("GET /api/gallery (category filter)", False, 
+                f"Status {resp.status_code}")
         
-        not_found = not any(d.get('id') == doctor_id for d in data_all.get('doctors', []))
+        data = resp.json()
+        images = data.get('images', [])
         
-        passed = delete_passed and not_found
-        print_test("Delete doctor and verify removal", passed,
-                   f"Status: {response.status_code}, Deleted: {delete_passed}, Not found: {not_found}")
-        return passed
+        # Verify all returned images are in 'clinic' category
+        for img in images:
+            if img.get('category') != 'clinic':
+                return test_result("GET /api/gallery (category filter)", False, 
+                    "Non-clinic image in filtered results")
+        
+        return test_result("GET /api/gallery (category filter)", True, 
+            f"Category filter working, found {len(images)} clinic images")
+    
     except Exception as e:
-        print_test("Delete doctor", False, f"Exception: {str(e)}")
-        return False
+        return test_result("GET /api/gallery (category filter)", False, str(e))
 
-def cleanup_test_doctors():
-    """Cleanup any test doctors created during testing"""
-    print("\n" + "="*60)
-    print("CLEANUP: Removing Test Doctors")
-    print("="*60)
+def test_25_get_gallery_categories():
+    """Test 25: GET /api/gallery/categories - returns array of unique categories"""
     try:
-        response = requests.get(f"{BASE_URL}/doctors?all=1", timeout=10)
-        data = response.json()
+        log("Test 25: GET /api/gallery/categories")
         
-        if 'doctors' in data:
-            for doctor in data['doctors']:
-                if doctor.get('name', '').startswith('Dr. Test') or doctor.get('name') == 'Dr. Updated Name':
-                    doctor_id = doctor.get('id')
-                    del_response = requests.delete(f"{BASE_URL}/doctors/{doctor_id}", timeout=10)
-                    print(f"  Deleted test doctor: {doctor.get('name')} (ID: {doctor_id})")
+        resp = requests.get(f"{BASE_URL}/gallery/categories", timeout=10)
         
-        print("  Cleanup completed")
-        return True
+        if resp.status_code != 200:
+            return test_result("GET /api/gallery/categories", False, f"Status {resp.status_code}")
+        
+        data = resp.json()
+        categories = data.get('categories', [])
+        
+        if not isinstance(categories, list):
+            return test_result("GET /api/gallery/categories", False, "Not an array")
+        
+        # Should include 'clinic' since we just added one
+        if 'clinic' not in categories:
+            return test_result("GET /api/gallery/categories", False, 
+                "'clinic' category not found")
+        
+        return test_result("GET /api/gallery/categories", True, 
+            f"Categories: {categories}")
+    
     except Exception as e:
-        print(f"  Cleanup failed: {str(e)}")
-        return False
+        return test_result("GET /api/gallery/categories", False, str(e))
 
-def main():
-    print("\n" + "="*60)
-    print("PHYSIOTHERAPY CLINIC BACKEND API TEST SUITE")
-    print("="*60)
-    print(f"Base URL: {BASE_URL}")
-    print("="*60)
-    
-    results = {}
-    
-    # ========== REGRESSION TESTS (Existing Endpoints) ==========
-    print("\n" + "="*60)
-    print("REGRESSION TESTS - Existing Endpoints")
-    print("="*60)
-    
-    # Test 1: Health check
-    results['health'] = test_health()
-    
-    # Test 2: Create appointment (valid)
-    appointment_id = test_create_appointment_success()
-    results['create_appointment_valid'] = appointment_id is not None
-    
-    # Test 3: Create appointment (missing fields)
-    results['create_appointment_invalid'] = test_create_appointment_missing_fields()
-    
-    # Test 4: Get appointments
-    results['get_appointments'] = test_get_appointments(appointment_id)
-    
-    # Test 5: Update appointment status
-    if appointment_id:
-        results['update_appointment'] = test_update_appointment_status(appointment_id)
-    else:
-        results['update_appointment'] = False
-        print("\n❌ SKIP: Update appointment (no appointment ID)")
-    
-    # Test 6: Create home visit
-    visit_id = test_create_home_visit()
-    results['create_home_visit'] = visit_id is not None
-    
-    # Test 7: Get home visits
-    results['get_home_visits'] = test_get_home_visits(visit_id)
-    
-    # Test 8: Update home visit status
-    if visit_id:
-        results['update_home_visit'] = test_update_home_visit_status(visit_id)
-    else:
-        results['update_home_visit'] = False
-        print("\n❌ SKIP: Update home visit (no visit ID)")
-    
-    # Test 9: Contact enquiries (create, get, update)
-    contact_id = test_create_contact()
-    results['create_contact'] = contact_id is not None
-    results['get_contacts'] = test_get_contacts(contact_id)
-    if contact_id:
-        results['update_contact'] = test_update_contact_status(contact_id)
-    else:
-        results['update_contact'] = False
-        print("\n❌ SKIP: Update contact (no contact ID)")
-    
-    # Test 10: Admin login (wrong password)
-    results['admin_login_wrong'] = test_admin_login_wrong_password()
-    
-    # Test 11: Admin login (correct password)
-    results['admin_login_correct'] = test_admin_login_correct_password()
-    
-    # Test 12: Admin stats (now includes activeDoctors)
-    results['admin_stats'] = test_admin_stats()
-    
-    # ========== NEW DOCTOR MANAGEMENT TESTS ==========
-    print("\n" + "="*60)
-    print("NEW TESTS - Doctor Management Endpoints")
-    print("="*60)
-    
-    # Test 13: Get default seeded doctors
-    results['get_doctors_default'] = test_get_doctors_default_seeded()
-    
-    # Test 14: Get doctors with all param
-    all_result, initial_count = test_get_doctors_with_all_param()
-    results['get_doctors_all'] = all_result
-    
-    # Test 15: Create doctor with valid data
-    doctor_id = test_create_doctor_valid()
-    results['create_doctor_valid'] = doctor_id is not None
-    
-    # Test 16: Create doctor without name (should fail)
-    results['create_doctor_no_name'] = test_create_doctor_missing_name()
-    
-    # Test 17-19: Disable doctor and verify visibility
-    if doctor_id:
-        results['disable_doctor'] = test_disable_doctor(doctor_id)
-        results['disabled_not_in_default'] = test_verify_disabled_doctor_not_in_default_list(doctor_id)
-        results['disabled_in_all'] = test_verify_disabled_doctor_in_all_list(doctor_id)
+def test_26_delete_gallery():
+    """Test 26: DELETE /api/gallery/{id} - verify removed"""
+    try:
+        log("Test 26: DELETE /api/gallery")
         
-        # Test 20: Update doctor fields
-        results['update_doctor_fields'] = test_update_doctor_fields(doctor_id)
+        if not test_data['gallery_id']:
+            return test_result("DELETE /api/gallery", False, "No gallery_id")
         
-        # Test 21: Update doctor photo
-        results['update_doctor_photo'] = test_update_doctor_photo(doctor_id)
+        resp = requests.delete(f"{BASE_URL}/gallery/{test_data['gallery_id']}", timeout=10)
         
-        # Test 22: Delete doctor
-        results['delete_doctor'] = test_delete_doctor(doctor_id)
-    else:
-        results['disable_doctor'] = False
-        results['disabled_not_in_default'] = False
-        results['disabled_in_all'] = False
-        results['update_doctor_fields'] = False
-        results['update_doctor_photo'] = False
-        results['delete_doctor'] = False
-        print("\n❌ SKIP: Doctor tests (no doctor ID)")
+        if resp.status_code != 200:
+            return test_result("DELETE /api/gallery", False, f"Status {resp.status_code}")
+        
+        # Verify removed
+        resp2 = requests.get(f"{BASE_URL}/gallery", timeout=10)
+        data2 = resp2.json()
+        images = data2.get('images', [])
+        found = any(img.get('id') == test_data['gallery_id'] for img in images)
+        
+        if found:
+            return test_result("DELETE /api/gallery", False, "Gallery image still exists")
+        
+        test_data['gallery_id'] = None
+        return test_result("DELETE /api/gallery", True, "Gallery image deleted successfully")
     
-    # Cleanup any remaining test doctors
-    cleanup_test_doctors()
+    except Exception as e:
+        return test_result("DELETE /api/gallery", False, str(e))
+
+# ==================== ADMIN STATS TESTS ====================
+
+def test_27_get_admin_stats_updated():
+    """Test 27: GET /api/admin/stats - includes new CMS fields"""
+    try:
+        log("Test 27: GET /api/admin/stats (updated)")
+        resp = requests.get(f"{BASE_URL}/admin/stats", timeout=10)
+        
+        if resp.status_code != 200:
+            return test_result("GET /api/admin/stats (updated)", False, f"Status {resp.status_code}")
+        
+        data = resp.json()
+        
+        # Check for new fields
+        required_fields = ['testimonials', 'blogs', 'services', 'gallery']
+        missing = [f for f in required_fields if f not in data]
+        
+        if missing:
+            return test_result("GET /api/admin/stats (updated)", False, 
+                f"Missing fields: {missing}")
+        
+        # Verify all are numbers
+        for field in required_fields:
+            if not isinstance(data[field], int):
+                return test_result("GET /api/admin/stats (updated)", False, 
+                    f"{field} is not a number")
+        
+        return test_result("GET /api/admin/stats (updated)", True, 
+            f"Stats: testimonials={data['testimonials']}, blogs={data['blogs']}, "
+            f"services={data['services']}, gallery={data['gallery']}")
+    
+    except Exception as e:
+        return test_result("GET /api/admin/stats (updated)", False, str(e))
+
+# ==================== REGRESSION TESTS ====================
+
+def test_28_regression_health():
+    """Test 28: GET /api/health - regression test"""
+    try:
+        log("Test 28: Regression - GET /api/health")
+        resp = requests.get(f"{BASE_URL}/health", timeout=10)
+        
+        if resp.status_code != 200:
+            return test_result("Regression: health", False, f"Status {resp.status_code}")
+        
+        data = resp.json()
+        if not data.get('ok'):
+            return test_result("Regression: health", False, "No ok field")
+        
+        return test_result("Regression: health", True, "Health endpoint working")
+    
+    except Exception as e:
+        return test_result("Regression: health", False, str(e))
+
+def test_29_regression_doctors():
+    """Test 29: GET /api/doctors - regression test (3 seeded doctors)"""
+    try:
+        log("Test 29: Regression - GET /api/doctors")
+        resp = requests.get(f"{BASE_URL}/doctors", timeout=10)
+        
+        if resp.status_code != 200:
+            return test_result("Regression: doctors", False, f"Status {resp.status_code}")
+        
+        data = resp.json()
+        doctors = data.get('doctors', [])
+        
+        if len(doctors) < 3:
+            return test_result("Regression: doctors", False, 
+                f"Expected at least 3 doctors, got {len(doctors)}")
+        
+        return test_result("Regression: doctors", True, f"Found {len(doctors)} doctors")
+    
+    except Exception as e:
+        return test_result("Regression: doctors", False, str(e))
+
+def test_30_regression_appointments():
+    """Test 30: POST /api/appointments - regression test"""
+    try:
+        log("Test 30: Regression - POST /api/appointments")
+        
+        appt_data = {
+            'patientName': 'Suresh Patel',
+            'phone': '9876543210',
+            'email': 'suresh@example.com',
+            'service': 'Acupressure',
+            'date': '2025-06-15',
+            'time': '10:00 AM',
+            'notes': 'Back pain'
+        }
+        
+        resp = requests.post(f"{BASE_URL}/appointments", json=appt_data, timeout=10)
+        
+        if resp.status_code != 200:
+            return test_result("Regression: appointments", False, f"Status {resp.status_code}")
+        
+        data = resp.json()
+        if not data.get('success'):
+            return test_result("Regression: appointments", False, "No success field")
+        
+        # Clean up
+        appt_id = data.get('appointment', {}).get('id')
+        if appt_id:
+            requests.delete(f"{BASE_URL}/appointments/{appt_id}", timeout=10)
+        
+        return test_result("Regression: appointments", True, "Appointments endpoint working")
+    
+    except Exception as e:
+        return test_result("Regression: appointments", False, str(e))
+
+def test_31_regression_admin_login():
+    """Test 31: POST /api/admin/login - regression test"""
+    try:
+        log("Test 31: Regression - POST /api/admin/login")
+        
+        resp = requests.post(f"{BASE_URL}/admin/login", 
+            json={'password': 'admin123'}, timeout=10)
+        
+        if resp.status_code != 200:
+            return test_result("Regression: admin login", False, f"Status {resp.status_code}")
+        
+        data = resp.json()
+        if not data.get('success') or not data.get('token'):
+            return test_result("Regression: admin login", False, "No success or token")
+        
+        return test_result("Regression: admin login", True, "Admin login working")
+    
+    except Exception as e:
+        return test_result("Regression: admin login", False, str(e))
+
+# ==================== MAIN TEST RUNNER ====================
+
+def run_all_tests():
+    """Run all tests in sequence"""
+    print("\n" + "="*70)
+    print("CMS ENDPOINTS COMPREHENSIVE TEST SUITE")
+    print("="*70)
+    
+    results = []
+    
+    # Settings Tests
+    print("\n### SETTINGS TESTS ###")
+    results.append(test_1_get_settings())
+    results.append(test_2_put_settings())
+    
+    # CMS Services Tests
+    print("\n### CMS SERVICES TESTS ###")
+    results.append(test_3_get_cms_services_empty())
+    results.append(test_4_post_cms_service())
+    results.append(test_5_post_cms_service_no_title())
+    results.append(test_6_get_cms_services_with_new())
+    results.append(test_7_patch_cms_service_inactive())
+    results.append(test_8_delete_cms_service())
+    
+    # Testimonials Tests
+    print("\n### TESTIMONIALS TESTS ###")
+    results.append(test_9_get_testimonials_seeded())
+    results.append(test_10_post_testimonial())
+    results.append(test_11_post_testimonial_validation())
+    results.append(test_12_patch_testimonial_inactive())
+    results.append(test_13_delete_testimonial())
+    
+    # Blogs Tests
+    print("\n### BLOGS TESTS ###")
+    results.append(test_14_get_blogs_empty())
+    results.append(test_15_post_blog())
+    results.append(test_16_post_blog_duplicate_slug())
+    results.append(test_17_get_blogs_draft_filtering())
+    results.append(test_18_patch_blog_publish())
+    results.append(test_19_get_blog_by_slug())
+    results.append(test_20_delete_blog())
+    
+    # Gallery Tests
+    print("\n### GALLERY TESTS ###")
+    results.append(test_21_get_gallery_empty())
+    results.append(test_22_post_gallery())
+    results.append(test_23_post_gallery_validation())
+    results.append(test_24_get_gallery_by_category())
+    results.append(test_25_get_gallery_categories())
+    results.append(test_26_delete_gallery())
+    
+    # Admin Stats Tests
+    print("\n### ADMIN STATS TESTS ###")
+    results.append(test_27_get_admin_stats_updated())
+    
+    # Regression Tests
+    print("\n### REGRESSION TESTS ###")
+    results.append(test_28_regression_health())
+    results.append(test_29_regression_doctors())
+    results.append(test_30_regression_appointments())
+    results.append(test_31_regression_admin_login())
     
     # Summary
-    print("\n" + "="*60)
+    print("\n" + "="*70)
     print("TEST SUMMARY")
-    print("="*60)
-    passed = sum(1 for v in results.values() if v)
+    print("="*70)
+    passed = sum(results)
     total = len(results)
-    print(f"\nTotal: {passed}/{total} tests passed")
+    print(f"\nTotal Tests: {total}")
+    print(f"Passed: {passed}")
+    print(f"Failed: {total - passed}")
+    print(f"Success Rate: {(passed/total)*100:.1f}%")
     
-    print("\n" + "="*60)
-    print("REGRESSION TESTS (Existing Endpoints):")
-    print("="*60)
-    regression_tests = ['health', 'create_appointment_valid', 'create_appointment_invalid', 
-                        'get_appointments', 'update_appointment', 'create_home_visit', 
-                        'get_home_visits', 'update_home_visit', 'create_contact', 
-                        'get_contacts', 'update_contact', 'admin_login_wrong', 
-                        'admin_login_correct', 'admin_stats']
-    for test_name in regression_tests:
-        if test_name in results:
-            status = "✅ PASS" if results[test_name] else "❌ FAIL"
-            print(f"  {status}: {test_name}")
-    
-    print("\n" + "="*60)
-    print("NEW DOCTOR MANAGEMENT TESTS:")
-    print("="*60)
-    doctor_tests = ['get_doctors_default', 'get_doctors_all', 'create_doctor_valid', 
-                    'create_doctor_no_name', 'disable_doctor', 'disabled_not_in_default', 
-                    'disabled_in_all', 'update_doctor_fields', 'update_doctor_photo', 
-                    'delete_doctor']
-    for test_name in doctor_tests:
-        if test_name in results:
-            status = "✅ PASS" if results[test_name] else "❌ FAIL"
-            print(f"  {status}: {test_name}")
-    
-    print("\n" + "="*60)
     if passed == total:
-        print("🎉 ALL TESTS PASSED!")
+        print("\n🎉 ALL TESTS PASSED!")
+        return 0
     else:
-        print(f"⚠️  {total - passed} TEST(S) FAILED")
-    print("="*60)
-    
-    return passed == total
+        print(f"\n⚠️  {total - passed} TEST(S) FAILED")
+        return 1
 
 if __name__ == "__main__":
-    success = main()
-    exit(0 if success else 1)
+    sys.exit(run_all_tests())

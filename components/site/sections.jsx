@@ -256,11 +256,21 @@ export const Doctors = () => {
   )
 }
 
-export const Testimonials = () => (
+export const Testimonials = ({ items }) => {
+  const [data, setData] = useState(items || [])
+  useEffect(() => {
+    if (items?.length) return
+    fetch('/api/testimonials').then(r => r.json()).then(d => {
+      const list = (d.testimonials || []).map(t => ({ name: t.patientName, rating: t.rating || 5, text: t.review, role: t.role || '', photo: t.photo }))
+      setData(list.length ? list : TESTIMONIALS)
+    }).catch(() => setData(TESTIMONIALS))
+  }, [items])
+  const list = data.length ? data : TESTIMONIALS
+  return (
   <Section id="testimonials">
     <SectionTitle eyebrow="Patient Stories" title="Real Results, Real People" subtitle="Hear directly from patients who reclaimed their lives with our care." />
     <motion.div {...stagger} className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-      {TESTIMONIALS.map((t, i) => (
+      {list.map((t, i) => (
         <motion.div key={i} variants={fadeUp}>
           <Card className="h-full border-slate-200 hover:shadow-lg transition-all">
             <CardContent className="p-6">
@@ -268,9 +278,11 @@ export const Testimonials = () => (
               <div className="flex mb-3">{[...Array(t.rating)].map((_, i) => <Star key={i} className="h-4 w-4 fill-yellow-400 text-yellow-400" />)}</div>
               <p className="text-slate-700 leading-relaxed mb-5">{t.text}</p>
               <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
-                <div className="h-11 w-11 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 text-white flex items-center justify-center font-semibold">
-                  {t.name.split(' ').map(n => n[0]).join('')}
-                </div>
+                {t.photo ? <img src={t.photo} alt={t.name} className="h-11 w-11 rounded-full object-cover" /> : (
+                  <div className="h-11 w-11 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 text-white flex items-center justify-center font-semibold">
+                    {t.name.split(' ').map(n => n[0]).join('')}
+                  </div>
+                )}
                 <div>
                   <div className="font-semibold text-slate-900 text-sm">{t.name}</div>
                   <div className="text-slate-500 text-xs">{t.role}</div>
@@ -282,7 +294,8 @@ export const Testimonials = () => (
       ))}
     </motion.div>
   </Section>
-)
+  )
+}
 
 export const FAQ = ({ faqs }) => (
   <Section id="faq" className="bg-slate-50">
