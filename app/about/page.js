@@ -4,7 +4,7 @@ import { BreadcrumbSchema } from '@/components/site/structured-data'
 import { buildMetadata } from '@/lib/clinic-data'
 
 export const metadata = buildMetadata({
-  title: 'About Us | Shri Ramvidya Acupressure Clinic',
+  title: 'About Us | Shri Ramvidya Neurotherapy Clinic Dudhi, Kushinagar',
   description: 'Learn about Shri Ramvidya Electro Acupressure Neuro Therapy & Aayu Pharmacy in Dudhi, Kushinagar. 15+ years of experience, 5000+ patients treated, certified M.D.A.M. Accu Therapists.',
   path: '/about',
 })
