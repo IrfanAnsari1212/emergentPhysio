@@ -12,7 +12,7 @@ export const metadata = {
     template: `%s | ${CLINIC.name}`,
   },
   description: 'Shri Ramvidya offers expert Electro Acupressure & Neuro Therapy in Dudhi, Kushinagar for back pain, paralysis, stroke recovery, sciatica, knee & joint pain. Drug-free, scientifically proven. Book online.',
-  keywords: 'acupressure clinic Kushinagar, neuro therapy Dudhi, back pain treatment, paralysis recovery, sciatica, electro acupressure, Shri Ramvidya, Aayu Pharmacy, physiotherapy Dudhi, physiotherapy Kushinagar',
+  keywords: 'acupressure clinic Kushinagar, neuro therapy Dudhi, back pain treatment, paralysis recovery, sciatica, electro acupressure, Shri Ramvidya, Ayushi Pharmacy, physiotherapy Dudhi, physiotherapy Kushinagar',
   authors: [{ name: CLINIC.fullName }],
   alternates: { canonical: SITE_URL },
   openGraph: {

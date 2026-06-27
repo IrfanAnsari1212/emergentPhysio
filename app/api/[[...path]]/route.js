@@ -29,7 +29,7 @@ const err = (msg, status = 400) => NextResponse.json({ error: msg }, { status })
 const clean = (doc) => { if (!doc) return doc; const { _id, ...r } = doc; return r }
 
 const DEFAULT_DOCTORS = [
-  { name: 'Dr. Ashwani Kumar Gupta', title: 'M.D.A.M. Accu Therapy (Raj.), B.Pharma, M.H.A.', specialization: 'Senior Acupressure & Neuro Therapist', experience: '15+ years', photo: '', active: true, order: 1 },
+  { name: 'Dr. Ashwani Kumar Gupta', title: 'M.D.A.M. Accu Therapy (Raj.), B.Pharma, M.H.A.', specialization: 'Senior Acupressure & Neuro Therapist', experience: '5+ years', photo: '', active: true, order: 1 },
   { name: 'Dr. Chhotelal Singh', title: 'M.D.A.M. Accu Therapy (Raj.)', specialization: 'Electro Acupressure Specialist', experience: '12+ years', photo: '', active: true, order: 2 },
   { name: 'Dr. Santosh Singh', title: 'M.D.A.M. Accu Therapy (Raj.)', specialization: 'Neuro Therapy Specialist', experience: '10+ years', photo: '', active: true, order: 3 },
 ]
@@ -78,7 +78,7 @@ const DEFAULT_SETTINGS = {
   },
   seo: {
     home: {
-      title: 'Shri Ramvidya | Electro Acupressure & Neuro Therapy Clinic in Dudhi, Kushinagar',
+      title: 'Shri Ramvidya Neurotherapy | Electro Acupressure & Neuro Therapy Clinic in Dudhi, Kushinagar',
       description: 'Trusted natural therapy clinic offering expert treatment for back pain, paralysis, stroke recovery, sciatica & joint pain in Dudhi, Kushinagar.',
       keywords: 'physiotherapy clinic Kushinagar, acupressure Dudhi, neuro therapy, back pain, paralysis recovery',
       ogImage: '',
